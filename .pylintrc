@@ -1,0 +1,19 @@
+[MASTER]
+init-hook='import sys; sys.path.append("src")'
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+# C0413: Import should be at the top of the module (needed for dotenv)
+# W1203: Use lazy % formatting in logging functions (f-strings are fine for this project)
+# C0111: Missing docstring (we have them mostly, but don't enforce everywhere strictly)
+disable=C0413,W1203,C0111
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=120
+
+[DESIGN]
+# Maximum number of arguments for function / method.
+max-args=8
+# Maximum number of locals for function / method body.
+max-locals=20
