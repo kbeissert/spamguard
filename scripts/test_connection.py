@@ -37,17 +37,16 @@ def test_ollama_connection():
 
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == 200:
+        if response.status_code == requests.codes.ok:
             print_test("Ollama erreichbar", True, "http://localhost:11434")
             return True
-        else:
-            print_test(
-                "Ollama erreichbar", False, f"Status Code: {response.status_code}"
-            )
-            print("\n💡 Lösung:")
-            print("   - Starte Ollama: ollama serve")
-            print("   - Oder als Dienst: brew services start ollama")
-            return False
+        print_test(
+            "Ollama erreichbar", False, f"Status Code: {response.status_code}"
+        )
+        print("\n💡 Lösung:")
+        print("   - Starte Ollama: ollama serve")
+        print("   - Oder als Dienst: brew services start ollama")
+        return False
     except requests.ConnectionError:
         print_test("Ollama erreichbar", False, "Verbindung fehlgeschlagen")
         print("\n💡 Lösung:")
@@ -66,7 +65,7 @@ def test_ollama_model():
 
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code != 200:
+        if response.status_code != requests.codes.ok:
             print_test("Modell-Liste abrufen", False, "Ollama antwortet nicht")
             return False
 
@@ -84,19 +83,19 @@ def test_ollama_model():
         if model_found:
             print_test(f"Modell '{SPAM_MODEL}' verfügbar", True)
             print(f"\n📋 Installierte Modelle ({len(models)}):")
-            for model in models[:5]:  # Zeige max 5
+            MAX_DISPLAY_MODELS = 5
+            for model in models[:MAX_DISPLAY_MODELS]:  # Zeige max 5
                 print(f"   - {model['name']}")
-            if len(models) > 5:
-                print(f"   ... und {len(models) - 5} weitere")
+            if len(models) > MAX_DISPLAY_MODELS:
+                print(f"   ... und {len(models) - MAX_DISPLAY_MODELS} weitere")
             return True
-        else:
-            print_test(f"Modell '{SPAM_MODEL}' verfügbar", False, "Nicht gefunden")
-            print("\n💡 Lösung:")
-            print(f"   - Installiere Modell: ollama pull {SPAM_MODEL}")
-            print("\n📋 Verfügbare Modelle:")
-            for model in models[:10]:
-                print(f"   - {model['name']}")
-            return False
+        print_test(f"Modell '{SPAM_MODEL}' verfügbar", False, "Nicht gefunden")
+        print("\n💡 Lösung:")
+        print(f"   - Installiere Modell: ollama pull {SPAM_MODEL}")
+        print("\n📋 Verfügbare Modelle:")
+        for model in models[:10]:
+            print(f"   - {model['name']}")
+        return False
 
     except Exception as e:
         print_test("Modell-Prüfung", False, str(e))
@@ -116,7 +115,7 @@ def test_email_accounts():
 
         try:
             # IMAP-Verbindung
-            mail = imaplib.IMAP4_SSL(account["server"], account["port"], timeout=10)
+            mail = imaplib.IMAP4_SSL(account["server"], int(account["port"]), timeout=10)
             print_test("SSL-Verbindung", True)
 
             # Login

@@ -73,8 +73,9 @@ def add_entry(list_type: str, entry: str) -> None:
         print("❌ Fehler: Leerer Eintrag")
         sys.exit(1)
 
-    if len(entry) > 255:
-        print("❌ Fehler: Eintrag zu lang (max 255 Zeichen)")
+    MAX_ENTRY_LENGTH = 255
+    if len(entry) > MAX_ENTRY_LENGTH:
+        print(f"❌ Fehler: Eintrag zu lang (max {MAX_ENTRY_LENGTH} Zeichen)")
         sys.exit(1)
 
     # Prüfe ob bereits vorhanden

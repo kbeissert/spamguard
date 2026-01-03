@@ -82,103 +82,36 @@ def _validate_source_config(source_name: str, config: Dict) -> bool:
     return True
 
 
-# Lade Blacklist-Quellen aus YAML
-def load_blacklist_sources() -> Dict[str, dict]:
-    """
-    Lädt externe Blacklist-Quellen aus YAML-Datei.
-    Falls Datei nicht existiert, wird sie aus Example erstellt.
-    Validiert alle Einträge und gibt detaillierte Fehlermeldungen aus.
+def _ensure_config_file() -> bool:
+    """Stellt sicher, dass die Konfigurationsdatei existiert."""
+    if BLACKLIST_SOURCES_FILE.exists():
+        return True
 
-    Returns:
-        Dict mit validierten Blacklist-Quellen
-    """
-    # Erstelle Datei aus Example falls nicht vorhanden
-    if not BLACKLIST_SOURCES_FILE.exists():
-        if BLACKLIST_SOURCES_EXAMPLE.exists():
-            logging.info(f"Erstelle {BLACKLIST_SOURCES_FILE.name} aus Example-Template")
-            print(f"ℹ️  Erstelle {BLACKLIST_SOURCES_FILE.name} aus Template...")
-            BLACKLIST_SOURCES_FILE.write_text(
-                BLACKLIST_SOURCES_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
-            )
-        else:
-            error_msg = (
-                f"❌ FEHLER: Keine Blacklist-Quellen Konfiguration gefunden!\n"
-                f"   Erwartet: {BLACKLIST_SOURCES_FILE}\n"
-                f"   Template: {BLACKLIST_SOURCES_EXAMPLE}\n"
-                f"   Bitte erstelle die Datei aus dem Template."
-            )
-            logging.error(error_msg)
-            print(error_msg)
-            return {}
+    if BLACKLIST_SOURCES_EXAMPLE.exists():
+        logging.info(f"Erstelle {BLACKLIST_SOURCES_FILE.name} aus Example-Template")
+        print(f"ℹ️  Erstelle {BLACKLIST_SOURCES_FILE.name} aus Template...")
+        BLACKLIST_SOURCES_FILE.write_text(
+            BLACKLIST_SOURCES_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        return True
 
+    error_msg = (
+        f"❌ FEHLER: Keine Blacklist-Quellen Konfiguration gefunden!\n"
+        f"   Erwartet: {BLACKLIST_SOURCES_FILE}\n"
+        f"   Template: {BLACKLIST_SOURCES_EXAMPLE}\n"
+        f"   Bitte erstelle die Datei aus dem Template."
+    )
+    logging.error(error_msg)
+    print(error_msg)
+    return False
+
+
+def _load_yaml_content() -> Optional[Dict]:
+    """Lädt den Inhalt der YAML-Datei."""
     try:
         with BLACKLIST_SOURCES_FILE.open("r", encoding="utf-8") as f:
-            sources = yaml.safe_load(f)
-
-        # Prüfe ob YAML leer ist
-        if sources is None:
-            logging.warning(
-                f"{BLACKLIST_SOURCES_FILE.name} ist leer, keine externen Blacklists konfiguriert"
-            )
-            return {}
-
-        if not isinstance(sources, dict):
-            error_msg = (
-                f"❌ FEHLER in {BLACKLIST_SOURCES_FILE.name}:\n"
-                f"   Ungültiges Format! Erwartet: YAML Dictionary\n"
-                f"   Gefunden: {type(sources).__name__}\n"
-                f"   Prüfe die YAML-Syntax!"
-            )
-            logging.error(error_msg)
-            print(error_msg)
-            return {}
-
-        # Validiere jeden Eintrag
-        valid_sources = {}
-        invalid_count = 0
-
-        for source_name, config in sources.items():
-            if not _validate_source_config(source_name, config):
-                invalid_count += 1
-                continue
-
-            # Validiere enabled Flag (optional, default: True)
-            enabled = config.get("enabled", True)
-            if not isinstance(enabled, bool):
-                print(
-                    f"⚠️  '{source_name}': 'enabled' muss true/false sein, nicht '{enabled}' - setze auf false"
-                )
-                logging.warning(
-                    f"Quelle '{source_name}': Ungültiger enabled-Wert '{enabled}', setze auf false"
-                )
-                config["enabled"] = False
-
-            # Alles OK, füge hinzu
-            valid_sources[source_name] = config
-
-        # Zusammenfassung
-        if invalid_count > 0:
-            print(
-                f"⚠️  {invalid_count} ungültige Einträge in {BLACKLIST_SOURCES_FILE.name} übersprungen"
-            )
-            logging.warning(
-                f"{invalid_count} ungültige Einträge in {BLACKLIST_SOURCES_FILE.name} übersprungen"
-            )
-
-        if valid_sources:
-            logging.info(
-                f"Blacklist-Quellen geladen: {len(valid_sources)} gültige Einträge aus {BLACKLIST_SOURCES_FILE.name}"
-            )
-        else:
-            print(
-                f"⚠️  Keine gültigen Blacklist-Quellen in {BLACKLIST_SOURCES_FILE.name} gefunden!"
-            )
-            logging.warning(
-                f"Keine gültigen Blacklist-Quellen in {BLACKLIST_SOURCES_FILE.name}"
-            )
-
-        return valid_sources
-
+            data = yaml.safe_load(f)
+            return data if isinstance(data, dict) else None
     except yaml.YAMLError as e:
         error_msg = (
             f"❌ YAML SYNTAX-FEHLER in {BLACKLIST_SOURCES_FILE.name}:\n"
@@ -193,8 +126,7 @@ def load_blacklist_sources() -> Dict[str, dict]:
         )
         logging.error(f"YAML Syntax-Fehler in {BLACKLIST_SOURCES_FILE.name}: {e}")
         print(error_msg)
-        return {}
-
+        return None
     except Exception as e:
         error_msg = (
             f"❌ FEHLER beim Laden von {BLACKLIST_SOURCES_FILE.name}:\n"
@@ -205,7 +137,89 @@ def load_blacklist_sources() -> Dict[str, dict]:
             f"Fehler beim Laden von {BLACKLIST_SOURCES_FILE.name}: {e}", exc_info=True
         )
         print(error_msg)
+        return None
+
+
+# Lade Blacklist-Quellen aus YAML
+def load_blacklist_sources() -> Dict[str, dict]:
+    """
+    Lädt externe Blacklist-Quellen aus YAML-Datei.
+    Falls Datei nicht existiert, wird sie aus Example erstellt.
+    Validiert alle Einträge und gibt detaillierte Fehlermeldungen aus.
+
+    Returns:
+        Dict mit validierten Blacklist-Quellen
+    """
+    if not _ensure_config_file():
         return {}
+
+    sources = _load_yaml_content()
+
+    # Prüfe ob YAML leer ist
+    if sources is None:
+        # Fehler wurde bereits in _load_yaml_content geloggt
+        if BLACKLIST_SOURCES_FILE.exists() and BLACKLIST_SOURCES_FILE.stat().st_size == 0:
+            logging.warning(
+                f"{BLACKLIST_SOURCES_FILE.name} ist leer, keine externen Blacklists konfiguriert"
+            )
+        return {}
+
+    if not isinstance(sources, dict):
+        error_msg = (
+            f"❌ FEHLER in {BLACKLIST_SOURCES_FILE.name}:\n"
+            f"   Ungültiges Format! Erwartet: YAML Dictionary\n"
+            f"   Gefunden: {type(sources).__name__}\n"
+            f"   Prüfe die YAML-Syntax!"
+        )
+        logging.error(error_msg)
+        print(error_msg)
+        return {}
+
+    # Validiere jeden Eintrag
+    valid_sources = {}
+    invalid_count = 0
+
+    for source_name, config in sources.items():
+        if not _validate_source_config(source_name, config):
+            invalid_count += 1
+            continue
+
+        # Validiere enabled Flag (optional, default: True)
+        enabled = config.get("enabled", True)
+        if not isinstance(enabled, bool):
+            print(
+                f"⚠️  '{source_name}': 'enabled' muss true/false sein, nicht '{enabled}' - setze auf false"
+            )
+            logging.warning(
+                f"Quelle '{source_name}': Ungültiger enabled-Wert '{enabled}', setze auf false"
+            )
+            config["enabled"] = False
+
+        # Alles OK, füge hinzu
+        valid_sources[source_name] = config
+
+    # Zusammenfassung
+    if invalid_count > 0:
+        print(
+            f"⚠️  {invalid_count} ungültige Einträge in {BLACKLIST_SOURCES_FILE.name} übersprungen"
+        )
+        logging.warning(
+            f"{invalid_count} ungültige Einträge in {BLACKLIST_SOURCES_FILE.name} übersprungen"
+        )
+
+    if valid_sources:
+        logging.info(
+            f"Blacklist-Quellen geladen: {len(valid_sources)} gültige Einträge aus {BLACKLIST_SOURCES_FILE.name}"
+        )
+    else:
+        print(
+            f"⚠️  Keine gültigen Blacklist-Quellen in {BLACKLIST_SOURCES_FILE.name} gefunden!"
+        )
+        logging.warning(
+            f"Keine gültigen Blacklist-Quellen in {BLACKLIST_SOURCES_FILE.name}"
+        )
+
+    return valid_sources
 
 
 # Lade Quellen beim Import
@@ -294,166 +308,135 @@ class ListManager:
             f"{len(self.blacklist_ips)} IPs)"
         )
 
-    def _load_local_whitelist(self) -> None:
-        """Lädt lokale Whitelist aus Textdatei (data/lists/whitelist.txt)."""
-        # Whitelist liegt in data/lists/ (NICHT im external/ Cache)
-        whitelist_path = LISTS_DIR / "whitelist.txt"
-
-        if not whitelist_path.exists():
-            logging.warning(f"Lokale Whitelist nicht gefunden: {whitelist_path}")
-            print(f"ℹ️  Erstelle leere Whitelist: {whitelist_path}")
-            logging.info("Erstelle leere Whitelist-Datei...")
-            whitelist_path.parent.mkdir(parents=True, exist_ok=True)
-            whitelist_path.write_text(
-                "# Whitelist - Eine E-Mail oder Domain pro Zeile\n# Beispiel:\n# trusted@example.com\n# example.com\n",
-                encoding="utf-8",
+    def _validate_and_add_entry(
+        self,
+        entry: str,
+        list_name: str,
+        line_num: int,
+        target_emails: Set[str],
+        target_domains: Set[str],
+    ) -> bool:
+        """Validiert einen Eintrag und fügt ihn der entsprechenden Liste hinzu."""
+        if not entry or len(entry) > MAX_ENTRY_LENGTH:
+            print(
+                f"⚠️  {list_name} Zeile {line_num}: Ungültiger Eintrag (zu lang oder leer)"
             )
+            logging.warning(
+                f"{list_name} Zeile {line_num}: Ungültiger Eintrag übersprungen"
+            )
+            return False
+
+        # Domain-Logik (startet mit @ oder enthält kein @)
+        if entry.startswith("@") or "@" not in entry:
+            domain = entry[1:].strip() if entry.startswith("@") else entry
+            
+            if not domain or " " in domain:
+                print(
+                    f"⚠️  {list_name} Zeile {line_num}: Domain darf keine Leerzeichen enthalten: {entry}"
+                )
+                logging.warning(
+                    f"{list_name} Zeile {line_num}: Ungültige Domain: {entry}"
+                )
+                return False
+            
+            target_domains.add(domain.lower())
+            return True
+        
+        # E-Mail-Logik
+        if entry.count("@") != 1:
+            print(
+                f"⚠️  {list_name} Zeile {line_num}: Ungültige E-Mail (mehrere @): {entry}"
+            )
+            logging.warning(
+                f"{list_name} Zeile {line_num}: Ungültige E-Mail: {entry}"
+            )
+            return False
+            
+        target_emails.add(entry.lower())
+        return True
+
+    def _load_generic_list(
+        self,
+        file_path: Path,
+        list_name: str,
+        target_emails: Set[str],
+        target_domains: Set[str],
+        default_content: str,
+    ) -> None:
+        """
+        Generische Funktion zum Laden lokaler Listen.
+
+        Args:
+            file_path: Pfad zur Datei
+            list_name: Name der Liste für Logs (z.B. "Whitelist")
+            target_emails: Set für E-Mails
+            target_domains: Set für Domains
+            default_content: Inhalt für neue Datei falls nicht existent
+        """
+        if not file_path.exists():
+            logging.warning(f"Lokale {list_name} nicht gefunden: {file_path}")
+            print(f"ℹ️  Erstelle leere {list_name}: {file_path}")
+            logging.info(f"Erstelle leere {list_name}-Datei...")
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(default_content, encoding="utf-8")
             return
 
         try:
-            entries = self._parse_list_file(whitelist_path)
+            entries = self._parse_list_file(file_path)
             invalid_count = 0
 
             for line_num, entry in enumerate(entries, start=1):
-                # Validiere Eintrag
-                if not entry or len(entry) > 255:
-                    print(
-                        f"⚠️  Whitelist Zeile {line_num}: Ungültiger Eintrag (zu lang oder leer)"
-                    )
-                    logging.warning(
-                        f"Whitelist Zeile {line_num}: Ungültiger Eintrag übersprungen"
-                    )
+                if not self._validate_and_add_entry(
+                    entry, list_name, line_num, target_emails, target_domains
+                ):
                     invalid_count += 1
-                    continue
-
-                # Prüfe ob E-Mail oder Domain
-                if entry.startswith("@"):
-                    # Domain mit @ angegeben (z.B. @amazon.com) -> als Domain behandeln
-                    domain = entry[1:].strip()
-                    if domain:
-                        if " " in domain:
-                            print(
-                                f"⚠️  Whitelist Zeile {line_num}: Domain darf keine Leerzeichen enthalten: {domain}"
-                            )
-                            invalid_count += 1
-                            continue
-                        self.whitelist_domains.add(domain.lower())
-                elif "@" in entry:
-                    # E-Mail Adresse
-                    if entry.count("@") != 1:
-                        print(
-                            f"⚠️  Whitelist Zeile {line_num}: Ungültige E-Mail (mehrere @): {entry}"
-                        )
-                        logging.warning(
-                            f"Whitelist Zeile {line_num}: Ungültige E-Mail: {entry}"
-                        )
-                        invalid_count += 1
-                        continue
-                    self.whitelist_emails.add(entry.lower())
-                else:
-                    # Domain (ohne @)
-                    if " " in entry:
-                        print(
-                            f"⚠️  Whitelist Zeile {line_num}: Domain darf keine Leerzeichen enthalten: {entry}"
-                        )
-                        logging.warning(
-                            f"Whitelist Zeile {line_num}: Ungültige Domain: {entry}"
-                        )
-                        invalid_count += 1
-                        continue
-                    self.whitelist_domains.add(entry.lower())
 
             valid_count = len(entries) - invalid_count
             if invalid_count > 0:
-                print(f"⚠️  Whitelist: {invalid_count} ungültige Einträge übersprungen")
+                print(f"⚠️  {list_name}: {invalid_count} ungültige Einträge übersprungen")
 
             logging.info(
-                f"Whitelist geladen: {valid_count} gültige von {len(entries)} Einträgen aus {whitelist_path}"
+                f"{list_name} geladen: {valid_count} gültige von {len(entries)} Einträgen aus {file_path}"
             )
 
         except Exception as e:
             error_msg = (
-                f"❌ FEHLER beim Laden der Whitelist ({whitelist_path}):\n"
+                f"❌ FEHLER beim Laden der {list_name} ({file_path}):\n"
                 f"   {str(e)}\n"
                 f"   Prüfe die Datei auf Fehler!"
             )
             print(error_msg)
-            logging.error(f"Fehler beim Laden der Whitelist: {e}", exc_info=True)
+            logging.error(f"Fehler beim Laden der {list_name}: {e}", exc_info=True)
+
+    def _load_local_whitelist(self) -> None:
+        """Lädt lokale Whitelist aus Textdatei (data/lists/whitelist.txt)."""
+        whitelist_path = LISTS_DIR / "whitelist.txt"
+        default_content = (
+            "# Whitelist - Eine E-Mail oder Domain pro Zeile\n"
+            "# Beispiel:\n# trusted@example.com\n# example.com\n"
+        )
+        self._load_generic_list(
+            whitelist_path,
+            "Whitelist",
+            self.whitelist_emails,
+            self.whitelist_domains,
+            default_content,
+        )
 
     def _load_local_blacklist(self) -> None:
         """Lädt lokale Blacklist aus Textdatei (data/lists/blacklist.txt)."""
-        # Blacklist liegt in data/lists/ (NICHT im external/ Cache)
         blacklist_path = LISTS_DIR / "blacklist.txt"
-
-        if not blacklist_path.exists():
-            logging.warning(f"Lokale Blacklist nicht gefunden: {blacklist_path}")
-            print(f"ℹ️  Erstelle leere Blacklist: {blacklist_path}")
-            logging.info("Erstelle leere Blacklist-Datei...")
-            blacklist_path.parent.mkdir(parents=True, exist_ok=True)
-            blacklist_path.write_text(
-                "# Blacklist - Eine E-Mail oder Domain pro Zeile\n# Beispiel:\n# spam@example.com\n# spammer-domain.com\n",
-                encoding="utf-8",
-            )
-            return
-
-        try:
-            entries = self._parse_list_file(blacklist_path)
-            invalid_count = 0
-
-            for line_num, entry in enumerate(entries, start=1):
-                # Validiere Eintrag
-                if not entry or len(entry) > 255:
-                    print(
-                        f"⚠️  Blacklist Zeile {line_num}: Ungültiger Eintrag (zu lang oder leer)"
-                    )
-                    logging.warning(
-                        f"Blacklist Zeile {line_num}: Ungültiger Eintrag übersprungen"
-                    )
-                    invalid_count += 1
-                    continue
-
-                # Prüfe ob E-Mail oder Domain
-                if "@" in entry:
-                    # E-Mail Adresse
-                    if entry.count("@") != 1:
-                        print(
-                            f"⚠️  Blacklist Zeile {line_num}: Ungültige E-Mail (mehrere @): {entry}"
-                        )
-                        logging.warning(
-                            f"Blacklist Zeile {line_num}: Ungültige E-Mail: {entry}"
-                        )
-                        invalid_count += 1
-                        continue
-                    self.blacklist_emails.add(entry.lower())
-                else:
-                    # Domain
-                    if " " in entry:
-                        print(
-                            f"⚠️  Blacklist Zeile {line_num}: Domain darf keine Leerzeichen enthalten: {entry}"
-                        )
-                        logging.warning(
-                            f"Blacklist Zeile {line_num}: Ungültige Domain: {entry}"
-                        )
-                        invalid_count += 1
-                        continue
-                    self.blacklist_domains.add(entry.lower())
-
-            valid_count = len(entries) - invalid_count
-            if invalid_count > 0:
-                print(f"⚠️  Blacklist: {invalid_count} ungültige Einträge übersprungen")
-
-            logging.info(
-                f"Blacklist geladen: {valid_count} gültige von {len(entries)} Einträgen aus {blacklist_path}"
-            )
-
-        except Exception as e:
-            error_msg = (
-                f"❌ FEHLER beim Laden der Blacklist ({blacklist_path}):\n"
-                f"   {str(e)}\n"
-                f"   Prüfe die Datei auf Fehler!"
-            )
-            print(error_msg)
-            logging.error(f"Fehler beim Laden der Blacklist: {e}", exc_info=True)
+        default_content = (
+            "# Blacklist - Eine E-Mail oder Domain pro Zeile\n"
+            "# Beispiel:\n# spam@example.com\n# spammer-domain.com\n"
+        )
+        self._load_generic_list(
+            blacklist_path,
+            "Blacklist",
+            self.blacklist_emails,
+            self.blacklist_domains,
+            default_content,
+        )
 
     def _load_external_blacklists(self, force_update: bool = False) -> None:
         """
@@ -586,9 +569,9 @@ class ListManager:
             content = file_path.read_text(encoding="utf-8")
             entries = []
 
-            for line in content.splitlines():
+            for raw_line in content.splitlines():
                 # Entferne Kommentare und Whitespace
-                line = line.split("#")[0].strip()
+                line = raw_line.split("#")[0].strip()
                 if line:
                     entries.append(line)
 
@@ -631,18 +614,31 @@ class ListManager:
             logging.info(f"✅ E-Mail auf Whitelist: {email_address}")
             return False, f"Whitelist: {email_address}"
 
-        if domain and domain in self.whitelist_domains:
-            logging.info(f"✅ Domain auf Whitelist: {domain}")
-            return False, f"Whitelist: @{domain}"
+        # Prüfe Domain und alle übergeordneten Domains (Subdomain-Check)
+        # Beispiel: mail.google.com -> prüft mail.google.com, google.com, com
+        if domain:
+            parts = domain.split(".")
+            # Wir prüfen von spezifisch nach allgemein, aber stoppen vor der TLD (letzter Teil)
+            # Mindestens Domain + TLD müssen übrig bleiben (z.B. google.com)
+            for i in range(len(parts) - 1):
+                parent_domain = ".".join(parts[i:])
+                if parent_domain in self.whitelist_domains:
+                    logging.info(f"✅ Domain auf Whitelist: {parent_domain} (Match für {domain})")
+                    return False, f"Whitelist: @{parent_domain}"
 
         # 2. Prüfe Blacklist
         if email_lower in self.blacklist_emails:
             logging.info(f"🚫 E-Mail auf Blacklist: {email_address}")
             return True, f"Blacklist: {email_address}"
 
-        if domain and domain in self.blacklist_domains:
-            logging.info(f"🚫 Domain auf Blacklist: {domain}")
-            return True, f"Blacklist: @{domain}"
+        # Prüfe Domain und alle übergeordneten Domains (Subdomain-Check)
+        if domain:
+            parts = domain.split(".")
+            for i in range(len(parts) - 1):
+                parent_domain = ".".join(parts[i:])
+                if parent_domain in self.blacklist_domains:
+                    logging.info(f"🚫 Domain auf Blacklist: {parent_domain} (Match für {domain})")
+                    return True, f"Blacklist: @{parent_domain}"
 
         # 3. Nicht in Listen gefunden
         return False, None
@@ -676,7 +672,8 @@ class ListManager:
         """Lädt Metadaten aus JSON-Datei."""
         if self.metadata_file.exists():
             try:
-                return json.loads(self.metadata_file.read_text(encoding="utf-8"))
+                data = json.loads(self.metadata_file.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
             except Exception as e:
                 logging.error(f"Fehler beim Laden von Metadaten: {e}")
         return {}
@@ -784,27 +781,34 @@ class ListManager:
         logging.info("Erzwinge Update aller externen Listen...")
         self._load_external_blacklists(force_update=True)
 
+    # ============================================
+    # Singleton-Instanz
+    # ============================================
 
-# ============================================
-# Singleton-Instanz
-# ============================================
+    _instance: Optional["ListManager"] = None
 
-# Globale Instanz für einfache Verwendung
-_list_manager_instance: Optional[ListManager] = None
+    @classmethod
+    def get_instance(cls) -> "ListManager":
+        """
+        Gibt Singleton-Instanz des ListManagers zurück.
+
+        Returns:
+            ListManager: Singleton-Instanz
+        """
+        if cls._instance is None:
+            cls._instance = cls()
+            cls._instance.load_all_lists()
+        return cls._instance
 
 
 def get_list_manager() -> ListManager:
     """
-    Gibt Singleton-Instanz des ListManagers zurück.
+    Wrapper für ListManager.get_instance() für Abwärtskompatibilität.
 
     Returns:
         ListManager: Singleton-Instanz
     """
-    global _list_manager_instance
-    if _list_manager_instance is None:
-        _list_manager_instance = ListManager()
-        _list_manager_instance.load_all_lists()
-    return _list_manager_instance
+    return ListManager.get_instance()
 
 
 # ============================================

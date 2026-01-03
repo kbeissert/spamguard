@@ -8,6 +8,7 @@ Hilfreich zum Finden des richtigen Spam-Ordner-Namens.
 
 import imaplib
 import sys
+import re
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -32,6 +33,82 @@ def decode_folder_name(folder_bytes):
             return folder_bytes.decode("latin-1", errors="ignore")
 
 
+def _parse_folder_name(folder_str: str) -> str:
+    """Parses the folder name from the IMAP list response."""
+    # Suche nach letztem Element nach dem Delimiter
+    match = re.search(r'"\s+(.+)$', folder_str)
+    if match:
+        return match.group(1).strip('"')
+
+    # Fallback
+    parts = folder_str.split()
+    return parts[-1].strip('"') if parts else "Unknown"
+
+
+def _should_show_folder(folder_name: str, show_all: bool) -> bool:
+    """Entscheidet, ob ein Ordner angezeigt werden soll."""
+    if show_all:
+        return True
+    # Überspringe interne/versteckte Ordner
+    return not (folder_name.startswith("[") or folder_name.startswith("."))
+
+
+def _connect_imap(account):
+    """Stellt IMAP-Verbindung her und loggt ein."""
+    print(f"\n{'=' * 60}")
+    print(f"  Account: {account['name']}")
+    print(f"  Server: {account['server']}:{account['port']}")
+    print(f"  User: {account['user']}")
+    print(f"{'=' * 60}\n")
+
+    try:
+        print(f"🔌 Verbinde mit {account['server']}...")
+        mail = imaplib.IMAP4_SSL(account["server"], int(account["port"]))
+
+        print(f"🔐 Login {account['name']}...")
+        mail.login(account["user"], account["password"])
+        print("✅ Login erfolgreich!\n")
+        return mail
+    except Exception as e:
+        print(f"❌ Fehler bei Verbindung/Login: {e}")
+        return None
+
+
+def _analyze_folders(mail, account, show_all):
+    """Ruft Ordner ab und analysiert sie."""
+    status, folders = mail.list()
+    if status != "OK":
+        print("❌ Fehler beim Abrufen der Ordner")
+        return [], [], False
+
+    configured_spam = account.get("spam_folder", "")
+    spam_found = False
+    folder_list = []
+    potential_spam_folders = []
+
+    for folder in folders:
+        try:
+            folder_str = folder.decode("utf-8", errors="ignore")
+            folder_name = _parse_folder_name(folder_str)
+
+            if not _should_show_folder(folder_name, show_all):
+                continue
+
+            folder_list.append(folder_name)
+
+            if folder_name == configured_spam:
+                spam_found = True
+
+            spam_keywords = ["spam", "junk", "trash", "papierkorb", "gelöscht"]
+            if any(keyword in folder_name.lower() for keyword in spam_keywords):
+                potential_spam_folders.append(folder_name)
+
+        except Exception:
+            pass
+
+    return folder_list, potential_spam_folders, spam_found
+
+
 def list_folders(account, show_all=False):
     """
     Listet alle IMAP-Ordner eines Accounts auf
@@ -40,97 +117,28 @@ def list_folders(account, show_all=False):
         account: Account-Dictionary mit IMAP-Zugangsdaten
         show_all: Wenn True, zeigt auch System-Ordner
     """
-    print(f"\n{'=' * 60}")
-    print(f"  Account: {account['name']}")
-    print(f"  Server: {account['server']}:{account['port']}")
-    print(f"  User: {account['user']}")
-    print(f"{'=' * 60}\n")
+    mail = _connect_imap(account)
+    if not mail:
+        return False
 
     try:
-        # IMAP-Verbindung aufbauen
-        print(f"🔌 Verbinde mit {account['server']}...")
-        mail = imaplib.IMAP4_SSL(account["server"], account["port"])
-
-        # Login
-        print(f"🔐 Login {account['name']}...")
-        mail.login(account["user"], account["password"])
-        print("✅ Login erfolgreich!\n")
-
-        # Ordner auflisten
-        status, folders = mail.list()
-
-        if status != "OK":
-            print("❌ Fehler beim Abrufen der Ordner")
-            return False
-
-        # Konfigurierter Spam-Ordner
+        folder_list, potential_spam_folders, spam_found = _analyze_folders(mail, account, show_all)
         configured_spam = account.get("spam_folder", "")
-        spam_found = False
-        folder_list = []
-        potential_spam_folders = []
 
-        for folder in folders:
-            # IMAP LIST gibt Format: (flags) "delimiter" "name" oder (flags) "delimiter" name
-            try:
-                # Dekodiere rohe Bytes
-                folder_str = folder.decode("utf-8", errors="ignore")
-
-                # Parsing mit Regex
-                # Format 1: (\Flags) "/" "INBOX"  (mit Anführungszeichen)
-                # Format 2: (\Flags) "/" INBOX    (ohne Anführungszeichen)
-                import re
-
-                # Suche nach letztem Element nach dem Delimiter
-                match = re.search(r'"\s+(.+)$', folder_str)
-                if match:
-                    folder_name = match.group(1).strip('"')
-                else:
-                    # Fallback
-                    parts = folder_str.split()
-                    folder_name = parts[-1].strip('"') if parts else "Unknown"
-
-                # System-Ordner filtern (optional)
-                if not show_all:
-                    # Überspringe interne/versteckte Ordner
-                    if folder_name.startswith("[") or folder_name.startswith("."):
-                        continue
-
-                folder_list.append(folder_name)
-
-                # Prüfe, ob es der konfigurierte Spam-Ordner ist
-                is_spam = folder_name == configured_spam
-                if is_spam:
-                    spam_found = True
-
-                # Sammle potenzielle Spam-Ordner
-                spam_keywords = ["spam", "junk", "trash", "papierkorb", "gelöscht"]
-                if any(keyword in folder_name.lower() for keyword in spam_keywords):
-                    potential_spam_folders.append(folder_name)
-
-            except Exception:
-                pass  # Fehler beim Parsen ignorieren
-
-        # Nur ausgeben wenn Spam-Ordner NICHT gefunden
         if configured_spam and not spam_found:
             print("📁 Verfügbare Ordner:")
             print("-" * 60)
 
-            # Ordner nochmal durchgehen für Ausgabe
             for folder_name in folder_list:
                 spam_keywords = ["spam", "junk", "trash", "papierkorb", "gelöscht"]
-                if any(keyword in folder_name.lower() for keyword in spam_keywords):
-                    marker = "⚠️  MÖGLICH"
-                else:
-                    marker = "  "
+                marker = "⚠️  MÖGLICH" if any(k in folder_name.lower() for k in spam_keywords) else "  "
                 print(f"{marker:12} {folder_name}")
 
             print("-" * 60)
             print(f"📊 Gesamt: {len(folder_list)} Ordner gefunden\n")
         elif spam_found:
-            # Spam-Ordner gefunden - kurze OK-Meldung
             print(f"✅ Spam-Ordner '{configured_spam}' gefunden\n")
 
-        # Warnung wenn Spam-Ordner nicht gefunden
         if configured_spam and not spam_found:
             print("=" * 60)
             print("⚠️  WARNUNG: Konfigurierter Spam-Ordner nicht gefunden!")
@@ -139,7 +147,6 @@ def list_folders(account, show_all=False):
             print("   Passe 'spam_folder' in accounts.yaml an!")
             print("=" * 60)
 
-        # Logout
         mail.logout()
         return True
 
@@ -149,6 +156,32 @@ def list_folders(account, show_all=False):
     except Exception as e:
         print(f"❌ Fehler: {e}")
         return False
+
+
+def _print_troubleshooting(failed_accounts, accounts):
+    """Gibt Tipps zur Fehlerbehebung aus."""
+    if not failed_accounts:
+        return
+
+    print(f"\n❌ Fehler bei folgenden Accounts: {', '.join(failed_accounts)}")
+    print("\n💡 Tipps bei Login-Fehlern:")
+    print("   - Prüfe Benutzername und Passwort in accounts.yaml")
+
+    # Spezifische Tips basierend auf Provider
+    for account_name in failed_accounts:
+        account = next((a for a in accounts if a["name"] == account_name), None)
+        if account:
+            server = account.get("server", "").lower()
+            if "gmail" in server:
+                print(
+                    f"   - {account_name}: App-Passwort erforderlich (nicht normales Passwort!)"
+                )
+            elif "outlook" in server or "hotmail" in server:
+                print(f"   - {account_name}: Bei 2FA App-Passwort verwenden")
+            elif "gmx" in server or "web.de" in server:
+                print(f"   - {account_name}: IMAP in Einstellungen aktivieren")
+
+    print("   - Stelle sicher, dass IMAP im E-Mail-Account aktiviert ist")
 
 
 def main():
@@ -198,27 +231,7 @@ def main():
     print(f"  Zusammenfassung: {success_count}/{len(accounts)} erfolgreich")
     print("=" * 60)
 
-    # Nur bei Fehlern Tips anzeigen
-    if failed_accounts:
-        print(f"\n❌ Fehler bei folgenden Accounts: {', '.join(failed_accounts)}")
-        print("\n💡 Tipps bei Login-Fehlern:")
-        print("   - Prüfe Benutzername und Passwort in accounts.yaml")
-
-        # Spezifische Tips basierend auf Provider
-        for account_name in failed_accounts:
-            account = next((a for a in accounts if a["name"] == account_name), None)
-            if account:
-                server = account.get("server", "").lower()
-                if "gmail" in server:
-                    print(
-                        f"   - {account_name}: App-Passwort erforderlich (nicht normales Passwort!)"
-                    )
-                elif "outlook" in server or "hotmail" in server:
-                    print(f"   - {account_name}: Bei 2FA App-Passwort verwenden")
-                elif "gmx" in server or "web.de" in server:
-                    print(f"   - {account_name}: IMAP in Einstellungen aktivieren")
-
-        print("   - Stelle sicher, dass IMAP im E-Mail-Account aktiviert ist")
+    _print_troubleshooting(failed_accounts, accounts)
 
 
 if __name__ == "__main__":

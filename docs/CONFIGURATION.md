@@ -82,6 +82,20 @@ Das Blacklist/Whitelist-System bietet einen **Hard Filter** vor der LLM-Analyse:
 2. **Blacklist** → E-Mail wird IMMER als SPAM behandelt  
 3. **LLM-Analyse** → Nur wenn nicht in Listen gefunden
 
+### Hierarchische Domain-Prüfung (Subdomains)
+
+Das System prüft Domains automatisch hierarchisch. Das bedeutet, wenn Sie eine Hauptdomain sperren (oder freigeben), gilt dies automatisch auch für alle Subdomains.
+
+**Beispiel:**
+Eintrag in der Liste: `example.com`
+
+Dies betrifft:
+- `user@example.com` (Exakter Treffer)
+- `newsletter@shop.example.com` (Subdomain)
+- `info@mail.server.example.com` (Tiefere Subdomain)
+
+Sie müssen also **keine Wildcards** (`*`) verwenden. Geben Sie einfach die Domain an, die Sie abdecken möchten.
+
 ### Aktivierung
 
 **.env**:
@@ -413,3 +427,27 @@ gpg -c accounts.yaml
 
 ### Umgebungsvariablen (Alternative)
 Falls du Passwörter nicht in Dateien speichern willst, kannst du sie auch als Umgebungsvariablen übergeben (erfordert Code-Anpassung).
+
+---
+
+## Hintergrund: Warum .txt Format für Listen?
+
+Wir verwenden bewusst einfache `.txt` Dateien für Whitelist und Blacklist.
+
+### ✅ Vorteile
+
+1. **Universelle Kompatibilität**: Funktioniert auf allen Betriebssystemen und mit jedem Editor.
+2. **Einfachheit**: Ein Eintrag pro Zeile. Keine komplexe Syntax wie JSON oder YAML.
+3. **Performance**: Sehr schnelles Parsing und minimaler Speicherbedarf.
+4. **Git-Freundlichkeit**: Exzellente Diffs (Zeile für Zeile) und einfache Merge-Konflikte.
+5. **Industriestandard**: Auch `hosts` Dateien, `robots.txt` und Ad-Blocker nutzen dieses Format.
+
+### 📋 Beispiel
+
+```txt
+# Kommentar: Wichtige Kunden
+admin@example.com
+company.com
+```
+
+Im Vergleich zu JSON oder YAML ist dies deutlich robuster gegen Syntaxfehler und einfacher zu warten.

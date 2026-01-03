@@ -1,185 +1,109 @@
 # ============================================
 # Ollama Spam Guard - Makefile
 # ============================================
-# Einfache Kurzbefehle zum Starten der Scripts
-#
-# Verwendung:
-#   make test      - Verbindungstest
-#   make run       - Spam-Filter starten
-#   make folders   - Ordnerstruktur anzeigen
-#   make help      - Hilfe anzeigen
 
-.PHONY: help test run folders install clean unspam unspam-auto unspam-dry \
-        whitelist-show whitelist-add whitelist-remove \
-        blacklist-show blacklist-add blacklist-remove \
-        benchmark benchmark-quick
+.PHONY: help start spam unspam whitelist show-lists status install clean test benchmark benchmark-quick
 
 # Virtual Environment Settings
 VENV = .venv
 PYTHON = $(VENV)/bin/python
 PIP = $(VENV)/bin/pip
 
-# Standard-Target (wird bei 'make' ohne Parameter aufgerufen)
+# Standard-Target
 help:
 	@echo "╔════════════════════════════════════════════╗"
-	@echo "║    Ollama Spam Guard - Verfügbare Befehle ║"
+	@echo "║    Ollama Spam Guard - Befehlsübersicht    ║"
 	@echo "╚════════════════════════════════════════════╝"
 	@echo ""
-	@echo "  make test       - Verbindungstest (Ollama, LLM, IMAP)"
-	@echo "  make run        - Spam-Filter starten"
-	@echo "  make unspam     - Whitelist-E-Mails aus Spam wiederherstellen"
-	@echo "  make unspam <email> - E-Mail zur Whitelist hinzufügen & wiederherstellen"
-	@echo "  make folders    - IMAP-Ordnerstruktur anzeigen"
-	@echo ""
-	@echo "  Benchmark:"
-	@echo "  make benchmark       - Benchmark starten (interaktiv)"
-	@echo "  make benchmark-quick - Benchmark Quick-Mode (5 Mails)"
+	@echo "  make start              - Spam-Filter starten"
 	@echo ""
 	@echo "  Listen verwalten:"
-	@echo "  make whitelist-show              - Whitelist anzeigen"
-	@echo "  make whitelist-add ENTRY=<mail>  - Zur Whitelist hinzufügen"
-	@echo "  make blacklist-show              - Blacklist anzeigen"
-	@echo "  make blacklist-add ENTRY=<mail>  - Zur Blacklist hinzufügen"
+	@echo "  make spam <adresse>     - Als Spam markieren (Blacklist)"
+	@echo "                            z.B. make spam werbung@nervig.de"
+	@echo "                            z.B. make spam nervig.de"
 	@echo ""
-	@echo "  make install    - Python-Dependencies installieren"
-	@echo "  make clean      - Cache-Dateien löschen"
+	@echo "  make unspam <adresse>   - Kein Spam (Whitelist + Wiederherstellen)"
+	@echo "                            z.B. make unspam freund@gut.de"
 	@echo ""
-	@echo "  make help       - Diese Hilfe anzeigen"
+	@echo "  make whitelist <adresse>- Nur zur Whitelist hinzufügen (ohne Restore)"
+	@echo "  make show-lists         - Alle Listen anzeigen"
+	@echo ""
+	@echo "  Benchmark:"
+	@echo "  make benchmark          - Interaktiver Modell-Vergleich"
+	@echo "  make benchmark-quick    - Schneller Test (5 Mails)"
+	@echo ""
+	@echo "  Wartung:"
+	@echo "  make status             - System-Status prüfen"
+	@echo "  make install            - Installation / Update"
+	@echo "  make clean              - Aufräumen"
+	@echo "  make test               - Verbindungstest"
 	@echo ""
 
-# Verbindungstest ausführen
-test:
-	@echo "🔍 Starte Verbindungstest..."
-	@$(PYTHON) scripts/test_connection.py
+# --------------------------------------------
+# Hauptbefehle
+# --------------------------------------------
 
-# Spam-Filter starten
-run:
+start:
 	@echo "🛡️  Starte Spam-Filter..."
 	@$(PYTHON) src/spam_filter.py
 
-# E-Mails von Whitelist-Absendern aus Spam-Ordner wiederherstellen
-# Unterstützt Argumente: make unspam email@example.com
+# Als Spam markieren (Blacklist)
+spam:
+	@$(PYTHON) scripts/manage_lists.py blacklist add "$(filter-out $@,$(MAKECMDGOALS))"
+
+# Kein Spam (Whitelist + Restore)
 unspam:
-	@echo "♻️  Starte Unspam..."
-	@$(PYTHON) scripts/unspam.py $(filter-out $@,$(MAKECMDGOALS))
-
-# Catch-all für Argumente (verhindert "No rule to make target" Fehler)
-%:
-	@:
-
-# Benchmark starten
-benchmark:
-	@echo "📊 Starte Benchmark..."
-	@$(PYTHON) scripts/benchmark/start_benchmark.py
-
-# Benchmark Quick-Mode
-benchmark-quick:
-	@echo "📊 Starte Benchmark (Quick Mode)..."
-	@$(PYTHON) scripts/benchmark/start_benchmark.py --quick
-
-
-# E-Mails wiederherstellen (automatisch, ohne Nachfrage)
-unspam-auto:
-	@echo "♻️  Starte Unspam (automatisch)..."
-	@$(PYTHON) scripts/unspam.py --auto
-
-# E-Mails nur anzeigen (Dry-Run)
-unspam-dry:
-	@echo "♻️  Starte Unspam (Dry-Run)..."
-	@$(PYTHON) scripts/unspam.py --dry-run
-
-# IMAP-Ordnerstruktur anzeigen
-folders:
-	@echo "📁 Zeige IMAP-Ordnerstruktur..."
-	@$(PYTHON) scripts/list_folders.py
-
-# Alle Ordner anzeigen (inkl. System-Ordner)
-folders-all:
-	@echo "📁 Zeige ALLE IMAP-Ordner..."
-	@$(PYTHON) scripts/list_folders.py --all
-
-# Dependencies installieren
-install:
-	@echo "📦 Erstelle Virtual Environment (.venv)..."
-	@python3 -m venv $(VENV)
-	@echo "📦 Installiere Python-Dependencies..."
-	@$(PIP) install -r requirements.txt
-	@echo "✅ Installation abgeschlossen!"
-
-# Cache-Dateien löschen
-clean:
-	@echo "🧹 Lösche Cache-Dateien..."
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f -name "*.pyc" -delete
-	@find . -type f -name "*.pyo" -delete
-	@find . -type f -name "*.pyd" -delete
-	@echo "✅ Cache gelöscht!"
-
-# ============================================
-# Listen-Verwaltung
-# ============================================
-
-# Whitelist anzeigen
-whitelist-show:
-	@$(PYTHON) scripts/manage_lists.py whitelist show
+	@$(PYTHON) scripts/unspam.py $(filter-out $@,$(MAKECMDGOALS)) --auto
 
 # Zur Whitelist hinzufügen
-# Usage: make whitelist-add ENTRY=email@example.com
-whitelist-add:
-ifndef ENTRY
-	@echo "❌ Fehler: ENTRY nicht angegeben"
-	@echo "Usage: make whitelist-add ENTRY=email@example.com"
-	@exit 1
-endif
-	@$(PYTHON) scripts/manage_lists.py whitelist add "$(ENTRY)"
+whitelist:
+	@$(PYTHON) scripts/manage_lists.py whitelist add "$(filter-out $@,$(MAKECMDGOALS))"
 
-# Von Whitelist entfernen
-# Usage: make whitelist-remove ENTRY=email@example.com
-whitelist-remove:
-ifndef ENTRY
-	@echo "❌ Fehler: ENTRY nicht angegeben"
-	@echo "Usage: make whitelist-remove ENTRY=email@example.com"
-	@exit 1
-endif
-	@$(PYTHON) scripts/manage_lists.py whitelist remove "$(ENTRY)"
-
-# Blacklist anzeigen
-blacklist-show:
+# Listen anzeigen
+show-lists:
+	@echo "\n📋 --- BLACKLIST ---"
 	@$(PYTHON) scripts/manage_lists.py blacklist show
+	@echo "\n📋 --- WHITELIST ---"
+	@$(PYTHON) scripts/manage_lists.py whitelist show
 
-# Zur Blacklist hinzufügen
-# Usage: make blacklist-add ENTRY=spam@example.com
-blacklist-add:
-ifndef ENTRY
-	@echo "❌ Fehler: ENTRY nicht angegeben"
-	@echo "Usage: make blacklist-add ENTRY=spam@example.com"
-	@exit 1
-endif
-	@$(PYTHON) scripts/manage_lists.py blacklist add "$(ENTRY)"
+# --------------------------------------------
+# Benchmark
+# --------------------------------------------
 
-# Von Blacklist entfernen
-# Usage: make blacklist-remove ENTRY=spam@example.com
-blacklist-remove:
-ifndef ENTRY
-	@echo "❌ Fehler: ENTRY nicht angegeben"
-	@echo "Usage: make blacklist-remove ENTRY=spam@example.com"
-	@exit 1
-endif
-	@$(PYTHON) scripts/manage_lists.py blacklist remove "$(ENTRY)"
+# Benchmark starten (Interaktiv)
+benchmark:
+	@$(PYTHON) scripts/benchmark/start_benchmark.py
 
-# Projekt-Status anzeigen
+# Benchmark Quick-Test (5 Mails)
+benchmark-quick:
+	@$(PYTHON) scripts/benchmark/start_benchmark.py --quick
+
+# --------------------------------------------
+# Wartung & Setup
+# --------------------------------------------
+
 status:
 	@echo "📊 Projekt-Status:"
-	@echo ""
-	@echo "Python-Version (in .venv):"
 	@$(PYTHON) --version
-	@echo ""
-	@echo "Installierte Pakete:"
-	@$(PIP) list | grep -E "python-dotenv|requests|tqdm|pyyaml|pandas" || echo "  Keine gefunden - führe 'make install' aus"
-	@echo ""
-	@echo "Git-Status:"
-	@git status -s || echo "  Kein Git-Repository"
-	@echo ""
-	@echo "Konfiguration:"
-	@test -f .env && echo "  ✅ .env vorhanden" || echo "  ❌ .env fehlt"
-	@test -f accounts.yaml && echo "  ✅ accounts.yaml vorhanden" || echo "  ❌ accounts.yaml fehlt"
+	@echo "Git:" && git status -s || echo "  (kein git)"
+	@test -f .env && echo "✅ .env vorhanden" || echo "❌ .env fehlt"
+
+install:
+	@echo "📦 Installiere Dependencies..."
+	@python3 -m venv $(VENV)
+	@$(PIP) install -r requirements.txt
+	@echo "✅ Fertig!"
+
+clean:
+	@echo "🧹 Räume auf..."
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@rm -rf .mypy_cache .ruff_cache
+	@echo "✅ Sauber!"
+
+test:
+	@echo "🔍 Verbindungstest..."
+	@$(PYTHON) scripts/test_connection.py
+
+# Catch-all für Argumente
+%:
+	@:

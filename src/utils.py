@@ -27,11 +27,13 @@ def decode_header_safe(header_value: str) -> str:
         for part, encoding in decoded_parts:
             if isinstance(part, bytes):
                 # Fix für "unknown-8bit" Encoding Fehler
-                if encoding == "unknown-8bit":
-                    encoding = "utf-8"
+                current_encoding = encoding
+                if current_encoding == "unknown-8bit":
+                    current_encoding = "utf-8"
 
                 try:
-                    decoded_str += part.decode(encoding or "utf-8", errors="ignore")
+                    decoded_part = part.decode(current_encoding or "utf-8", errors="replace")
+                    decoded_str += decoded_part
                 except LookupError:
                     # Fallback für andere unbekannte Encodings
                     decoded_str += part.decode("utf-8", errors="ignore")

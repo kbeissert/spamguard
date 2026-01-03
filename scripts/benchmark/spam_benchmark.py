@@ -17,7 +17,10 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 import requests
-# import questionary # Removed interactive dependency
+
+# Add project root to path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from src.config import SYSTEM_PROMPT
 
 # Configuration
 # DEFAULT_MODELS will be fetched dynamically from Ollama if not specified
@@ -280,13 +283,7 @@ def call_ollama(
     # Optimization for Ministral: Use a lightweight system prompt to reduce input tokens
     # (The default system prompt is ~600 tokens long due to tool definitions)
     if "ministral" in model.lower():
-        payload["system"] = (
-            f"You are an intelligent Spam Detection System. "
-            f"Analyze the email content and metadata critically. "
-            f"Legitimate emails (HAM) can come from unknown senders. "
-            f"Only mark as SPAM if there are clear indicators like phishing, scams, unsolicited offers, or malicious content. "
-            f"The current date is {datetime.datetime.now().strftime('%Y-%m-%d')}."
-        )
+        payload["system"] = SYSTEM_PROMPT.format(date=datetime.datetime.now().strftime('%Y-%m-%d'))
 
     # Only add 'think' parameter if explicitly requested (to enable/disable)
     # If use_thinking is True, we don't set 'think': False.
@@ -443,6 +440,10 @@ def calculate_score(model_results: pd.DataFrame, total_emails: int) -> Dict:
     }
 
 
+# Constants
+MIN_ACCURACY_FOR_SPEED_BADGE = 80.0
+HTTP_OK = 200
+
 def assign_badges(df: pd.DataFrame) -> pd.DataFrame:
     """
     Assigns badges (Rating) to models based on their performance relative to others.
@@ -474,7 +475,7 @@ def assign_badges(df: pd.DataFrame) -> pd.DataFrame:
     # Ensure avg_tps is numeric
     df["avg_tps"] = pd.to_numeric(df["avg_tps"], errors="coerce").fillna(0)
 
-    decent_models = df[df["accuracy_pct"] >= 80.0]
+    decent_models = df[df["accuracy_pct"] >= MIN_ACCURACY_FOR_SPEED_BADGE]
     if not decent_models.empty:
         best_speed_idx = decent_models["avg_tps"].idxmax()
         badge_map[best_speed_idx].append("⚡Speed")
@@ -503,7 +504,7 @@ def generate_recommendation(scores_df: pd.DataFrame, output_path: str):
 
     best_overall = scores_df.iloc[0]
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("=== SPAM DETECTION BENCHMARK RESULTS ===\n")
         f.write(f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Test Emails: {best_overall['total_emails']}\n\n")
@@ -552,7 +553,7 @@ def check_reasoning_support(model: str) -> bool:
     }
     try:
         response = requests.post(OLLAMA_API_URL, json=payload, timeout=30)
-        if response.status_code == 200:
+        if response.status_code == HTTP_OK:
             data = response.json()
             has_thinking = "thinking" in data and data["thinking"]
             print(f" {'YES' if has_thinking else 'NO'}")
@@ -561,6 +562,97 @@ def check_reasoning_support(model: str) -> bool:
         pass
     print(" NO (Error/Timeout)")
     return False
+
+
+def _run_benchmark_for_models(models_to_test, emails_df):
+    """Runs the benchmark for the specified models."""
+    all_detailed_results = []
+    model_scores = []
+
+    print("")
+
+    for model in models_to_test:
+        # Determine test configurations based on reasoning support
+        test_configs = []
+
+        if check_reasoning_support(model):
+            test_configs.append({"thinking": True, "label": f"{model} (Thinking:on)"})
+            test_configs.append({"thinking": False, "label": f"{model} (Thinking:off)"})
+        else:
+            test_configs.append({"thinking": False, "label": model})
+
+        for config in test_configs:
+            display_model_name = config["label"]
+            use_thinking = config["thinking"]
+
+            model_results = test_model(model, emails_df, use_thinking)
+
+            # Update model name in results
+            for res in model_results:
+                res["model"] = display_model_name
+
+            all_detailed_results.extend(model_results)
+
+            # Calculate score for this model configuration
+            df_results = pd.DataFrame(model_results)
+            score_data = calculate_score(df_results, len(emails_df))
+            model_scores.append(score_data)
+
+    return all_detailed_results, model_scores
+
+
+def _save_results(output_dir, all_detailed_results, model_scores):
+    """Saves the benchmark results to CSV files."""
+    # Save Detailed Results
+    detailed_csv_path = os.path.join(output_dir, "detailed_results.csv")
+    new_detailed_df = pd.DataFrame(all_detailed_results)
+
+    if os.path.exists(detailed_csv_path):
+        existing_detailed = pd.read_csv(detailed_csv_path)
+        # Remove old entries for the tested models to avoid duplicates if re-testing
+        tested_labels = [res["model"] for res in all_detailed_results]
+        existing_detailed = existing_detailed[
+            ~existing_detailed["model"].isin(tested_labels)
+        ]
+        final_detailed_df = pd.concat(
+            [existing_detailed, new_detailed_df], ignore_index=True
+        )
+    else:
+        final_detailed_df = new_detailed_df
+
+    final_detailed_df.to_csv(detailed_csv_path, index=False)
+
+    # Save Model Scores (Persistent Leaderboard)
+    scores_csv_path = os.path.join(output_dir, "model_scores.csv")
+    new_scores_df = pd.DataFrame(model_scores)
+
+    if os.path.exists(scores_csv_path):
+        existing_scores = pd.read_csv(scores_csv_path)
+        # Remove old entries for the tested models (overwrite logic)
+        tested_labels = [score["model"] for score in model_scores]
+        existing_scores = existing_scores[~existing_scores["model"].isin(tested_labels)]
+        final_scores_df = pd.concat([existing_scores, new_scores_df], ignore_index=True)
+    else:
+        final_scores_df = new_scores_df
+
+    # Clean up columns: Remove 'stars' if present, reset 'rating'
+    if "stars" in final_scores_df.columns:
+        final_scores_df = final_scores_df.drop(columns=["stars"])
+    if "badges" in final_scores_df.columns:
+        final_scores_df = final_scores_df.drop(columns=["badges"])
+    if "rating" in final_scores_df.columns:
+        final_scores_df = final_scores_df.drop(columns=["rating"])
+
+    # Recalculate badges for the entire leaderboard
+    final_scores_df = assign_badges(final_scores_df)
+
+    # Sort by Score (descending)
+    final_scores_df = final_scores_df.sort_values(
+        by="score", ascending=False
+    ).reset_index(drop=True)
+    final_scores_df.to_csv(scores_csv_path, index=False)
+
+    return final_scores_df
 
 
 def main():
@@ -599,101 +691,22 @@ def main():
         print("   Or run 'python start_benchmark.py' for interactive selection.")
         return
 
-    all_detailed_results = []
-    model_scores = []
+    # Run Benchmark
+    all_detailed_results, model_scores = _run_benchmark_for_models(
+        models_to_test, emails_df
+    )
 
-    print("")
-
-    for model in models_to_test:
-        # Determine test configurations based on reasoning support
-        test_configs = []
-
-        if check_reasoning_support(model):
-            test_configs.append({"thinking": True, "label": f"{model} (Thinking:on)"})
-            test_configs.append({"thinking": False, "label": f"{model} (Thinking:off)"})
-        else:
-            test_configs.append({"thinking": False, "label": model})
-
-        for config in test_configs:
-            display_model_name = config["label"]
-            use_thinking = config["thinking"]
-
-            model_results = test_model(model, emails_df, use_thinking)
-
-            # Update model name in results
-            for res in model_results:
-                res["model"] = display_model_name
-
-            all_detailed_results.extend(model_results)
-
-            # Calculate score for this model configuration
-            df_results = pd.DataFrame(model_results)
-            score_data = calculate_score(df_results, len(emails_df))
-            model_scores.append(score_data)
-
-    # Save Detailed Results (Append mode logic could be complex for detailed results,
-    # but user asked specifically for model_scores.csv persistence.
-    # For detailed results, we might want to keep them per run or append.
-    # Let's append to detailed_results.csv as well for consistency)
-    detailed_csv_path = os.path.join(args.output, "detailed_results.csv")
-    new_detailed_df = pd.DataFrame(all_detailed_results)
-
-    if os.path.exists(detailed_csv_path):
-        existing_detailed = pd.read_csv(detailed_csv_path)
-        # Remove old entries for the tested models to avoid duplicates if re-testing
-        # We need to filter by the display names now
-        tested_labels = [res["model"] for res in all_detailed_results]
-        existing_detailed = existing_detailed[
-            ~existing_detailed["model"].isin(tested_labels)
-        ]
-        final_detailed_df = pd.concat(
-            [existing_detailed, new_detailed_df], ignore_index=True
-        )
-    else:
-        final_detailed_df = new_detailed_df
-
-    final_detailed_df.to_csv(detailed_csv_path, index=False)
-
-    # Save Model Scores (Persistent Leaderboard)
-    scores_csv_path = os.path.join(args.output, "model_scores.csv")
-    new_scores_df = pd.DataFrame(model_scores)
-
-    if os.path.exists(scores_csv_path):
-        existing_scores = pd.read_csv(scores_csv_path)
-        # Remove old entries for the tested models (overwrite logic)
-        tested_labels = [score["model"] for score in model_scores]
-        existing_scores = existing_scores[~existing_scores["model"].isin(tested_labels)]
-        final_scores_df = pd.concat([existing_scores, new_scores_df], ignore_index=True)
-    else:
-        final_scores_df = new_scores_df
-
-    # Clean up columns: Remove 'stars' if present, reset 'rating'
-    if "stars" in final_scores_df.columns:
-        final_scores_df = final_scores_df.drop(columns=["stars"])
-    if "badges" in final_scores_df.columns:
-        final_scores_df = final_scores_df.drop(columns=["badges"])
-    if "rating" in final_scores_df.columns:
-        final_scores_df = final_scores_df.drop(columns=["rating"])
-
-    # Recalculate badges for the entire leaderboard
-    final_scores_df = assign_badges(final_scores_df)
-
-    # Sort by Score (descending)
-    final_scores_df = final_scores_df.sort_values(
-        by="score", ascending=False
-    ).reset_index(drop=True)
-    final_scores_df.to_csv(scores_csv_path, index=False)
+    # Save Results
+    final_scores_df = _save_results(args.output, all_detailed_results, model_scores)
 
     # Generate Recommendation based on the FULL leaderboard
     rec_path = os.path.join(args.output, "recommendation.txt")
     generate_recommendation(final_scores_df, rec_path)
 
-    # Create Log file (empty for now, just to satisfy requirement of existence or maybe copy stdout?)
-    # The requirement says "benchmark_YYYYMMDD_HHMMSS.log # Timestamped Log-Datei"
-    # I'll just write a simple log summary there.
+    # Create Log file
     log_filename = f"benchmark_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     log_path = os.path.join(args.output, log_filename)
-    with open(log_path, "w") as f:
+    with open(log_path, "w", encoding="utf-8") as f:
         f.write(f"Benchmark run at {datetime.datetime.now()}\n")
         f.write(f"Models tested: {', '.join(models_to_test)}\n")
         f.write(f"Total emails: {len(emails_df)}\n")

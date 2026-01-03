@@ -17,7 +17,7 @@ data/lists/blacklist_sources.yaml
 !data/lists/blacklist.txt.example
 !data/lists/blacklist_sources.yaml.example
 
-# Externe Listen Cache (automatisch geladen, wird immer neu erstellt)
+# Externe Listen Cache
 data/lists/external/
 !data/lists/external/.gitkeep
 
@@ -25,34 +25,18 @@ data/lists/external/
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-*.pyo
-*.pyd
 .Python
 
-# Virtual Environments
-venv/
-env/
-ENV/
+# Virtual Environment
 .venv/
-virtualenv/
-
-# Distribution / Packaging
-build/
-dist/
-*.egg-info/
-*.egg
-wheels/
 
 # Logs & Output
-logs/
 *.log
 spam_filter.log
 
 # Benchmark Results (nur README behalten)
 benchmark/*
 !benchmark/README.md
-~/spam_filter.log
 
 # IDE & Editors
 .vscode/
@@ -60,26 +44,20 @@ benchmark/*
 *.swp
 *.swo
 *~
-.project
-.pydevproject
 
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
+*.command
 
-# macOS App Bundle (plattformspezifisch, nicht committen)
+# macOS App Bundle
 *.app/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
-*.cover
-
-# Jupyter Notebooks (falls später genutzt)
-.ipynb_checkpoints/
 
 # Temp Files
 *.tmp

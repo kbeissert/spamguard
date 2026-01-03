@@ -4,16 +4,29 @@ Accounts werden aus YAML-Datei geladen
 """
 
 import os
+from pathlib import Path
+from typing import List, Dict, Any
+
 import yaml
 from dotenv import load_dotenv
-from typing import List, Dict, Any
-from pathlib import Path
 
 # Lade .env aus Root
 load_dotenv()
 
 # Projekt-Root Verzeichnis
 PROJECT_ROOT = Path(__file__).parent.parent
+
+# ============================================
+# Konstanten & Prompts
+# ============================================
+
+SYSTEM_PROMPT = (
+    "You are an intelligent Spam Detection System. "
+    "Analyze the email content and metadata critically. "
+    "Legitimate emails (HAM) can come from unknown senders. "
+    "Only mark as SPAM if there are clear indicators like phishing, scams, unsolicited offers, or malicious content. "
+    "The current date is {date}."
+)
 
 # ============================================
 # YAML Account-Loader

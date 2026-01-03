@@ -18,25 +18,27 @@ Autor: Generiert mit Continue + Codepilot
 Datum: 2025-11-20
 """
 
-import imaplib
 import email
 import email.header
 import email.utils
-import requests
+import imaplib
 import logging
-from typing import Tuple, Dict, Optional, Any, List
-from datetime import datetime, timedelta
 from collections import defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional, Tuple
+
+import requests
 from tqdm import tqdm
 
 from config import (
+    DAYS_BACK,
     EMAIL_ACCOUNTS,
-    OLLAMA_URL,
-    SPAM_MODEL,
     FILTER_MODE,
     LIMIT,
-    DAYS_BACK,
     LOG_PATH,
+    OLLAMA_URL,
+    SPAM_MODEL,
+    SYSTEM_PROMPT,
     USE_LISTS,
     LIST_UPDATE_INTERVAL,
     FORCE_LIST_UPDATE,
@@ -46,10 +48,18 @@ from config import (
 from list_manager import ListManager
 from utils import decode_header_safe, extract_body_preview
 
+# Constants
+MAX_SUBJECT_LENGTH = 60
+MAX_SUMMARY_SUBJECT_LENGTH = 70
+MAX_SUBJECTS_TO_SHOW = 3
+HTTP_OK = 200
+LLM_TIMEOUT = 120
+LLM_WARMUP_TIMEOUT = 60
+OLLAMA_CHECK_TIMEOUT = 3
+
 # Logging-Setup
-log_path = LOG_PATH
 logging.basicConfig(
-    filename=log_path,
+    filename=LOG_PATH,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
@@ -232,13 +242,7 @@ def detect_spam(
     # Ministral-Optimierung: Lightweight System-Prompt
     # Reduziert Input-Tokens von ~600 auf ~50 und steigert Effizienz
     if "ministral" in SPAM_MODEL.lower():
-        payload["system"] = (
-            f"You are an intelligent Spam Detection System. "
-            f"Analyze the email content and metadata critically. "
-            f"Legitimate emails (HAM) can come from unknown senders. "
-            f"Only mark as SPAM if there are clear indicators like phishing, scams, unsolicited offers, or malicious content. "
-            f"The current date is {datetime.now().strftime('%Y-%m-%d')}."
-        )
+        payload["system"] = SYSTEM_PROMPT.format(date=datetime.now().strftime('%Y-%m-%d'))
 
     # Deaktiviere Thinking explizit, falls nicht gewünscht
     if not use_thinking:
@@ -284,6 +288,85 @@ def detect_spam(
 
 
 
+
+
+def _process_single_email(
+    mail: imaplib.IMAP4_SSL,
+    email_id: bytes,
+    account: Dict[str, str],
+    list_manager: Optional[ListManager],
+    stats: Dict[str, Any],
+) -> None:
+    """Verarbeitet eine einzelne E-Mail."""
+    try:
+        # ID dekodieren für IMAP-Befehle
+        email_id_str = email_id.decode("utf-8")
+
+        # Hole E-Mail
+        status, msg_data = mail.fetch(email_id_str, "(RFC822)")
+        if status != "OK":
+            logging.error(f"Fetch fehlgeschlagen für ID {email_id_str}")
+            return
+
+        # Parse E-Mail
+        raw_email = msg_data[0]
+        if isinstance(raw_email, tuple):
+            msg = email.message_from_bytes(raw_email[1])
+        else:
+            logging.error(f"Unerwartetes Format für E-Mail ID {email_id_str}")
+            return
+
+        # Extrahiere Metadaten
+        sender = email.utils.parseaddr(msg.get("From", ""))[1] or "Unbekannt"
+        subject = decode_header_safe(msg.get("Subject", "Kein Betreff"))
+        body_preview = extract_body_preview(msg)
+
+        # Ausgabe
+        print(f"\n📧 Von: {sender}")
+        print(
+            f"   Betreff: {subject[:MAX_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_SUBJECT_LENGTH else ''}"
+        )
+
+        # LLM-Analyse
+        is_spam, reason = detect_spam(
+            sender, subject, body_preview, list_manager=list_manager
+        )
+
+        if is_spam:
+            print(f"   ❌ SPAM: {reason[:100]}")
+
+            # Verschiebe zu Spam-Ordner
+            try:
+                mail.copy(email_id_str, account["spam_folder"])
+                mail.store(email_id_str, "+FLAGS", "\\Deleted")
+                logging.info(
+                    f"SPAM verschoben: {subject} von {sender} ({account['name']})"
+                )
+
+                # Sammle Absender für Übersicht
+                if isinstance(stats["spam_senders"], list):
+                    stats["spam_senders"].append(
+                        {"email": sender, "subject": subject, "reason": reason}
+                    )
+            except Exception as e:
+                logging.error(f"Spam-Verschiebung fehlgeschlagen: {e}")
+                print(f"   ⚠️  Verschiebung fehlgeschlagen: {e}")
+
+            if isinstance(stats["spam"], int):
+                stats["spam"] += 1
+        else:
+            print(f"   ✅ HAM: {reason[:100]}")
+
+            # Markiere als gelesen
+            mail.store(email_id_str, "+FLAGS", "\\Seen")
+            logging.info(f"HAM behalten: {subject} ({account['name']})")
+
+            if isinstance(stats["ham"], int):
+                stats["ham"] += 1
+
+    except Exception as e:
+        logging.error(f"Fehler bei E-Mail ID {email_id!r}: {e}", exc_info=True)
+        print(f"\n⚠️  Fehler bei dieser E-Mail: {e}")
 
 
 def process_inbox(
@@ -350,71 +433,7 @@ def process_inbox(
 
         # Verarbeite E-Mails mit Progress-Bar
         for email_id in tqdm(email_ids, desc="Verarbeite E-Mails", unit="mail"):
-            try:
-                # Hole E-Mail
-                status, msg_data = mail.fetch(email_id, "(RFC822)")
-                if status != "OK":
-                    logging.error(f"Fetch fehlgeschlagen für ID {email_id}")
-                    continue
-
-                # Parse E-Mail
-                raw_email = msg_data[0]
-                if isinstance(raw_email, tuple):
-                    msg = email.message_from_bytes(raw_email[1])
-                else:
-                    logging.error(f"Unerwartetes Format für E-Mail ID {email_id}")
-                    continue
-
-                # Extrahiere Metadaten
-                sender = email.utils.parseaddr(msg.get("From", ""))[1] or "Unbekannt"
-                subject = decode_header_safe(msg.get("Subject", "Kein Betreff"))
-                body_preview = extract_body_preview(msg)
-
-                # Ausgabe
-                print(f"\n📧 Von: {sender}")
-                print(f"   Betreff: {subject[:60]}{'...' if len(subject) > 60 else ''}")
-
-                # LLM-Analyse
-                is_spam, reason = detect_spam(
-                    sender, subject, body_preview, list_manager=list_manager
-                )
-
-                if is_spam:
-                    print(f"   ❌ SPAM: {reason[:100]}")
-
-                    # Verschiebe zu Spam-Ordner
-                    try:
-                        mail.copy(email_id, account["spam_folder"])
-                        mail.store(email_id, "+FLAGS", "\\Deleted")
-                        logging.info(
-                            f"SPAM verschoben: {subject} von {sender} ({account['name']})"
-                        )
-
-                        # Sammle Absender für Übersicht
-                        if isinstance(stats["spam_senders"], list):
-                            stats["spam_senders"].append(
-                                {"email": sender, "subject": subject, "reason": reason}
-                            )
-                    except Exception as e:
-                        logging.error(f"Spam-Verschiebung fehlgeschlagen: {e}")
-                        print(f"   ⚠️  Verschiebung fehlgeschlagen: {e}")
-
-                    if isinstance(stats["spam"], int):
-                        stats["spam"] += 1
-                else:
-                    print(f"   ✅ HAM: {reason[:100]}")
-
-                    # Markiere als gelesen
-                    mail.store(email_id, "+FLAGS", "\\Seen")
-                    logging.info(f"HAM behalten: {subject} ({account['name']})")
-
-                    if isinstance(stats["ham"], int):
-                        stats["ham"] += 1
-
-            except Exception as e:
-                logging.error(f"Fehler bei E-Mail ID {email_id}: {e}", exc_info=True)
-                print(f"\n⚠️  Fehler bei dieser E-Mail: {e}")
-                continue
+            _process_single_email(mail, email_id, account, list_manager, stats)
 
         return stats
 
@@ -435,6 +454,137 @@ def process_inbox(
 # ============================================
 
 
+def _check_ollama_availability() -> bool:
+    """Prüft ob Ollama und das Modell verfügbar sind."""
+    print("🔍 Prüfe Ollama-Verfügbarkeit...")
+    try:
+        response = requests.get(
+            "http://localhost:11434/api/tags", timeout=OLLAMA_CHECK_TIMEOUT
+        )
+        if response.status_code == HTTP_OK:
+            print("✅ Ollama läuft")
+
+            # Prüfe ob Modell verfügbar ist
+            print(f"🔍 Prüfe LLM-Modell '{SPAM_MODEL}'...")
+            models_data = response.json()
+            available_models = [
+                model["name"] for model in models_data.get("models", [])
+            ]
+
+            if SPAM_MODEL in available_models:
+                print(f"✅ Modell '{SPAM_MODEL}' ist verfügbar")
+            else:
+                print(f"⚠️  Modell '{SPAM_MODEL}' nicht gefunden!")
+                print(
+                    f"   Verfügbare Modelle: {', '.join(available_models) if available_models else 'keine'}"
+                )
+                print(f"   Installation: ollama pull {SPAM_MODEL}")
+                print("\n⏹️  Script wird abgebrochen.\n")
+                logging.error(
+                    f"LLM-Modell {SPAM_MODEL} nicht verfügbar - Script abgebrochen"
+                )
+                return False
+
+            # Teste LLM mit einfacher Anfrage (Warm-up)
+            print(f"🚀 Starte LLM '{SPAM_MODEL}'...")
+            print(
+                "   ⏳ Bitte warten, Modell wird geladen (beim ersten Aufruf kann das etwas dauern)..."
+            )
+
+            try:
+                warmup_response = requests.post(
+                    OLLAMA_URL,
+                    json={
+                        "model": SPAM_MODEL,
+                        "prompt": "Test",
+                        "stream": False,
+                        "options": {"num_predict": 1},
+                    },
+                    timeout=LLM_WARMUP_TIMEOUT,
+                )
+                warmup_response.raise_for_status()
+                print(f"✅ LLM '{SPAM_MODEL}' ist einsatzbereit!\n")
+                logging.info(f"LLM {SPAM_MODEL} erfolgreich initialisiert")
+                return True
+
+            except requests.Timeout:
+                print("⚠️  LLM-Initialisierung dauert zu lange (Timeout)")
+                print(
+                    "   Das Script läuft weiter, aber LLM-Anfragen könnten langsam sein.\n"
+                )
+                logging.warning("LLM Warmup Timeout")
+                return True
+            except Exception as e:
+                print(f"⚠️  LLM-Test fehlgeschlagen: {e}")
+                print("   Das Script läuft weiter, aber es könnte zu Problemen kommen.\n")
+                logging.warning(f"LLM Warmup fehlgeschlagen: {e}")
+                return True
+        else:
+            print("⚠️  Ollama antwortet nicht wie erwartet\n")
+            return False
+    except requests.ConnectionError:
+        print("❌ Ollama nicht erreichbar!")
+        print("   Starte in anderem Terminal: ollama serve")
+        print("   (Oder als Dienst: brew services start ollama)")
+        print("   Details: docs/SETUP.md → Abschnitt 'Ollama einrichten'")
+        print("\n⏹️  Script wird abgebrochen - keine E-Mails verarbeitet.\n")
+        logging.error("Ollama nicht erreichbar - Script abgebrochen")
+        return False
+
+
+def _print_summary(total_stats: Dict[str, Any]) -> None:
+    """Gibt die Zusammenfassung aus."""
+    total = total_stats["spam"] + total_stats["ham"]
+    print("\n" + "=" * 60)
+    print("📊 Gesamtzusammenfassung")
+    print("=" * 60)
+    print(
+        f"   Accounts verarbeitet: {total_stats['accounts_processed']}/{len(EMAIL_ACCOUNTS)}"
+    )
+
+    if total_stats["accounts_failed"] > 0:
+        print(f"   ⚠️  Accounts fehlgeschlagen: {total_stats['accounts_failed']}")
+
+    print(f"   Gesamt analysiert: {total} E-Mails")
+    print(f"   ❌ Als SPAM erkannt: {total_stats['spam']}")
+    print(f"   ✅ Als HAM erkannt: {total_stats['ham']}")
+
+    if total > 0:
+        spam_rate = (total_stats["spam"] / total) * 100
+        print(f"   📈 Gesamt-Spam-Rate: {spam_rate:.1f}%")
+
+    # Zeige Spam-Absender Übersicht (Global)
+    if total_stats.get("spam_senders"):
+        print("\n" + "=" * 60)
+        print(
+            f"🚫 SPAM-ABSENDER ÜBERSICHT ({len(total_stats['spam_senders'])} E-Mails verschoben)"
+        )
+        print("=" * 60)
+
+        # Gruppiere nach E-Mail-Adresse
+        senders_grouped = defaultdict(list)
+        for spam_mail in total_stats["spam_senders"]:
+            senders_grouped[spam_mail["email"]].append(spam_mail["subject"])
+
+        for sender_email, subjects in sorted(senders_grouped.items()):
+            print(f"\n📧 {sender_email} ({len(subjects)} E-Mail(s))")
+            for subject in subjects[:MAX_SUBJECTS_TO_SHOW]:
+                print(
+                    f"   • {subject[:MAX_SUMMARY_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_SUMMARY_SUBJECT_LENGTH else ''}"
+                )
+            if len(subjects) > MAX_SUBJECTS_TO_SHOW:
+                print(f"   ... und {len(subjects) - MAX_SUBJECTS_TO_SHOW} weitere")
+
+        print("\n" + "=" * 60)
+        print("💡 TIPP: Falls eine E-Mail-Adresse fälschlich blockiert wurde:")
+        print("   1. Füge sie zur Whitelist hinzu: data/lists/whitelist.txt")
+        print("   2. Stelle E-Mails wieder her: make unspam")
+        print("=" * 60)
+
+    print(f"\n   📄 Details: {LOG_PATH}")
+    print("=" * 60 + "\n")
+
+
 def main():
     """Hauptfunktion des Spam-Filters mit Multi-Account Support."""
 
@@ -449,80 +599,11 @@ def main():
     else:
         print(f"   Filter: Letzte {LIMIT} E-Mails pro Account")
 
-    print(f"   Log: {log_path}")
+    print(f"   Log: {LOG_PATH}")
     print("=" * 60 + "\n")
 
     try:
-        # Prüfe Ollama-Verfügbarkeit
-        print("🔍 Prüfe Ollama-Verfügbarkeit...")
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=3)
-            if response.status_code == 200:
-                print("✅ Ollama läuft")
-
-                # Prüfe ob Modell verfügbar ist
-                print(f"🔍 Prüfe LLM-Modell '{SPAM_MODEL}'...")
-                models_data = response.json()
-                available_models = [
-                    model["name"] for model in models_data.get("models", [])
-                ]
-
-                if SPAM_MODEL in available_models:
-                    print(f"✅ Modell '{SPAM_MODEL}' ist verfügbar")
-                else:
-                    print(f"⚠️  Modell '{SPAM_MODEL}' nicht gefunden!")
-                    print(
-                        f"   Verfügbare Modelle: {', '.join(available_models) if available_models else 'keine'}"
-                    )
-                    print(f"   Installation: ollama pull {SPAM_MODEL}")
-                    print("\n⏹️  Script wird abgebrochen.\n")
-                    logging.error(
-                        f"LLM-Modell {SPAM_MODEL} nicht verfügbar - Script abgebrochen"
-                    )
-                    return
-
-                # Teste LLM mit einfacher Anfrage (Warm-up)
-                print(f"🚀 Starte LLM '{SPAM_MODEL}'...")
-                print(
-                    "   ⏳ Bitte warten, Modell wird geladen (beim ersten Aufruf kann das etwas dauern)..."
-                )
-
-                try:
-                    warmup_response = requests.post(
-                        OLLAMA_URL,
-                        json={
-                            "model": SPAM_MODEL,
-                            "prompt": "Test",
-                            "stream": False,
-                            "options": {"num_predict": 1},
-                        },
-                        timeout=60,  # Längerer Timeout für Modell-Laden
-                    )
-                    warmup_response.raise_for_status()
-                    print(f"✅ LLM '{SPAM_MODEL}' ist einsatzbereit!\n")
-                    logging.info(f"LLM {SPAM_MODEL} erfolgreich initialisiert")
-
-                except requests.Timeout:
-                    print("⚠️  LLM-Initialisierung dauert zu lange (Timeout)")
-                    print(
-                        "   Das Script läuft weiter, aber LLM-Anfragen könnten langsam sein.\n"
-                    )
-                    logging.warning("LLM Warmup Timeout")
-                except Exception as e:
-                    print(f"⚠️  LLM-Test fehlgeschlagen: {e}")
-                    print(
-                        "   Das Script läuft weiter, aber es könnte zu Problemen kommen.\n"
-                    )
-                    logging.warning(f"LLM Warmup fehlgeschlagen: {e}")
-            else:
-                print("⚠️  Ollama antwortet nicht wie erwartet\n")
-        except requests.ConnectionError:
-            print("❌ Ollama nicht erreichbar!")
-            print("   Starte in anderem Terminal: ollama serve")
-            print("   (Oder als Dienst: brew services start ollama)")
-            print("   Details: docs/SETUP.md → Abschnitt 'Ollama einrichten'")
-            print("\n⏹️  Script wird abgebrochen - keine E-Mails verarbeitet.\n")
-            logging.error("Ollama nicht erreichbar - Script abgebrochen")
+        if not _check_ollama_availability():
             return
 
         # Initialisiere ListManager
@@ -566,54 +647,7 @@ def main():
                     f"\n   📊 {account['name']}: {account_total} E-Mails ({stats['spam']} SPAM, {stats['ham']} HAM, {spam_rate:.1f}% Spam-Rate)"
                 )
 
-        # Finale Gesamtstatistik
-        total = total_stats["spam"] + total_stats["ham"]
-        print("\n" + "=" * 60)
-        print("📊 Gesamtzusammenfassung")
-        print("=" * 60)
-        print(
-            f"   Accounts verarbeitet: {total_stats['accounts_processed']}/{len(EMAIL_ACCOUNTS)}"
-        )
-
-        if total_stats["accounts_failed"] > 0:
-            print(f"   ⚠️  Accounts fehlgeschlagen: {total_stats['accounts_failed']}")
-
-        print(f"   Gesamt analysiert: {total} E-Mails")
-        print(f"   ❌ Als SPAM erkannt: {total_stats['spam']}")
-        print(f"   ✅ Als HAM erkannt: {total_stats['ham']}")
-
-        if total > 0:
-            spam_rate = (total_stats["spam"] / total) * 100
-            print(f"   📈 Gesamt-Spam-Rate: {spam_rate:.1f}%")
-
-        # Zeige Spam-Absender Übersicht (Global)
-        if total_stats.get("spam_senders"):
-            print("\n" + "=" * 60)
-            print(
-                f"🚫 SPAM-ABSENDER ÜBERSICHT ({len(total_stats['spam_senders'])} E-Mails verschoben)"
-            )
-            print("=" * 60)
-
-            # Gruppiere nach E-Mail-Adresse
-            senders_grouped = defaultdict(list)
-            for spam_mail in total_stats["spam_senders"]:
-                senders_grouped[spam_mail["email"]].append(spam_mail["subject"])
-
-            for sender_email, subjects in sorted(senders_grouped.items()):
-                print(f"\n📧 {sender_email} ({len(subjects)} E-Mail(s))")
-                for subject in subjects[:3]:  # Zeige max 3 Betreffs
-                    print(f"   • {subject[:70]}{'...' if len(subject) > 70 else ''}")
-                if len(subjects) > 3:
-                    print(f"   ... und {len(subjects) - 3} weitere")
-
-            print("\n" + "=" * 60)
-            print("💡 TIPP: Falls eine E-Mail-Adresse fälschlich blockiert wurde:")
-            print("   1. Füge sie zur Whitelist hinzu: data/lists/whitelist.txt")
-            print("   2. Stelle E-Mails wieder her: make unspam")
-            print("=" * 60)
-
-        print(f"\n   📄 Details: {log_path}")
-        print("=" * 60 + "\n")
+        _print_summary(total_stats)
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Abbruch durch Benutzer")
@@ -621,7 +655,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Unerwarteter Fehler: {e}")
         logging.error(f"Unerwarteter Fehler: {e}", exc_info=True)
-        print(f"\n💡 Details in: {log_path}")
+        print(f"\n💡 Details in: {LOG_PATH}")
 
 
 if __name__ == "__main__":

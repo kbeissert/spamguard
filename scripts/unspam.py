@@ -29,6 +29,9 @@ from config import EMAIL_ACCOUNTS, LOG_PATH
 from list_manager import get_list_manager
 from utils import decode_header_safe
 
+# Constants
+MAX_SUBJECT_LENGTH = 60
+
 # Logging
 logging.basicConfig(
     filename=LOG_PATH,
@@ -47,18 +50,17 @@ def connect_imap(account: Dict[str, str]) -> imaplib.IMAP4_SSL:
     Returns:
         IMAP4_SSL: Verbundenes Mail-Objekt
     """
-    mail = imaplib.IMAP4_SSL(account["server"], account["port"])
+    mail = imaplib.IMAP4_SSL(account["server"], int(account["port"]))
     mail.login(account["user"], account["password"])
     return mail
 
 
-def find_whitelisted_spam(account: Dict[str, str], dry_run: bool = False) -> List[Dict]:
+def find_whitelisted_spam(account: Dict[str, str]) -> List[Dict]:
     """
     Durchsucht Spam-Ordner nach E-Mails von Whitelist-Absendern.
 
     Args:
         account: Account-Konfiguration
-        dry_run: Nur prüfen, nichts verschieben
 
     Returns:
         List[Dict]: Gefundene E-Mails mit Metadaten
@@ -118,11 +120,12 @@ def find_whitelisted_spam(account: Dict[str, str], dry_run: bool = False) -> Lis
                 # Prüfe gegen Whitelist
                 is_spam, reason = list_manager.check_email(sender)
 
-                # is_spam = False bedeutet: auf Whitelist!
-                if is_spam is False:
+                # Nur wiederherstellen, wenn explizit auf der Whitelist!
+                # check_email gibt (False, None) zurück, wenn die Mail weder auf White- noch Blacklist ist.
+                if is_spam is False and reason and reason.startswith("Whitelist"):
                     print(f"✅ Gefunden: {sender}")
                     print(
-                        f"   Betreff: {subject[:60]}{'...' if len(subject) > 60 else ''}"
+                        f"   Betreff: {subject[:MAX_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_SUBJECT_LENGTH else ''}"
                     )
                     print(f"   Grund: {reason}")
 
@@ -188,7 +191,7 @@ def restore_emails(account: Dict[str, str], emails: List[Dict]) -> int:
 
                     print(f"✅ Wiederhergestellt: {email_data['sender']}")
                     print(
-                        f"   Betreff: {email_data['subject'][:60]}{'...' if len(email_data['subject']) > 60 else ''}"
+                        f"   Betreff: {email_data['subject'][:MAX_SUBJECT_LENGTH]}{'...' if len(email_data['subject']) > MAX_SUBJECT_LENGTH else ''}"
                     )
 
                     logging.info(
@@ -214,6 +217,57 @@ def restore_emails(account: Dict[str, str], emails: List[Dict]) -> int:
         )
 
     return restored_count
+
+
+def _add_to_whitelist(email_to_add: str) -> None:
+    """Fügt eine E-Mail-Adresse zur Whitelist hinzu."""
+    whitelist_path = Path(__file__).parent.parent / "data" / "lists" / "whitelist.txt"
+    try:
+        # Prüfe ob bereits vorhanden
+        if whitelist_path.exists():
+            content = whitelist_path.read_text(encoding="utf-8")
+            if email_to_add in content:
+                print(f"ℹ️  {email_to_add} ist bereits auf der Whitelist.")
+                return
+
+        # Füge hinzu
+        with whitelist_path.open("a", encoding="utf-8") as f:
+            f.write(f"\n{email_to_add}")
+        print(f"✅ {email_to_add} zur Whitelist hinzugefügt.")
+
+        # Reload ListManager
+        get_list_manager().load_all_lists(force_update=False)
+
+    except Exception as e:
+        print(f"❌ Fehler beim Schreiben der Whitelist: {e}")
+
+
+def _process_account(account: Dict[str, str], auto: bool, dry_run: bool) -> None:
+    """Verarbeitet einen einzelnen Account."""
+    print("\n" + "─" * 60)
+    print(f"📬 Account: {account['name']}")
+    print("─" * 60)
+
+    # 1. Suche Whitelisted E-Mails im Spam-Ordner
+    found_emails = find_whitelisted_spam(account)
+
+    if not found_emails:
+        print("✅ Keine fälschlich markierten E-Mails gefunden.")
+        return
+
+    # 2. Wiederherstellen
+    if dry_run:
+        print(f"\n🔍 Dry-Run: Würde {len(found_emails)} E-Mail(s) wiederherstellen.")
+    elif auto:
+        restore_emails(account, found_emails)
+    else:
+        # Interaktive Abfrage
+        print(f"\n❓ {len(found_emails)} E-Mail(s) wiederherstellen? (j/n)")
+        choice = input("> ").lower()
+        if choice in ["j", "y", "ja", "yes"]:
+            restore_emails(account, found_emails)
+        else:
+            print("⏹️  Abgebrochen.")
 
 
 def main():
@@ -243,34 +297,7 @@ def main():
 
     # Wenn E-Mail übergeben wurde, zur Whitelist hinzufügen
     if args.email:
-        email_to_add = args.email.strip().lower()
-        whitelist_path = (
-            Path(__file__).parent.parent / "data" / "lists" / "whitelist.txt"
-        )
-
-        try:
-            # Prüfe ob bereits vorhanden
-            current_content = (
-                whitelist_path.read_text(encoding="utf-8")
-                if whitelist_path.exists()
-                else ""
-            )
-            if email_to_add in current_content.lower():
-                print(f"ℹ️  {email_to_add} ist bereits auf der Whitelist.")
-            else:
-                print(f"📝 Füge {email_to_add} zur Whitelist hinzu...")
-                with open(whitelist_path, "a", encoding="utf-8") as f:
-                    if not current_content.endswith("\n") and current_content:
-                        f.write("\n")
-                    f.write(f"{email_to_add}\n")
-                print(f"✅ {email_to_add} wurde zur Whitelist hinzugefügt.")
-
-                # Reload ListManager um die Änderung sofort wirksam zu machen
-                get_list_manager().load_all_lists(force_update=False)
-
-        except Exception as e:
-            print(f"❌ Fehler beim Schreiben der Whitelist: {e}")
-            return
+        _add_to_whitelist(args.email.strip().lower())
 
     print(f"   Accounts: {len(EMAIL_ACCOUNTS)}")
 
@@ -283,70 +310,15 @@ def main():
 
     print("=" * 60)
 
-    total_found = 0
-    total_restored = 0
+    # Verarbeite alle Accounts
+    for account in EMAIL_ACCOUNTS:
+        _process_account(account, args.auto, args.dry_run)
 
-    for idx, account in enumerate(EMAIL_ACCOUNTS, 1):
-        print(f"\n{'─' * 60}")
-        print(f"📬 Account {idx}/{len(EMAIL_ACCOUNTS)}: {account['name']}")
-        print(f"   Server: {account['server']}")
-        print(f"   Spam-Ordner: {account['spam_folder']}")
-        print("─" * 60)
-
-        # Suche E-Mails auf Whitelist
-        found = find_whitelisted_spam(account, dry_run=args.dry_run)
-
-        if not found:
-            print("✅ Keine E-Mails von Whitelist-Absendern im Spam-Ordner\n")
-            continue
-
-        total_found += len(found)
-
-        print(f"\n📊 {len(found)} E-Mail(s) von Whitelist-Absendern gefunden")
-
-        # Dry-Run: Nur anzeigen
-        if args.dry_run:
-            print("ℹ️  DRY RUN - Keine Änderungen vorgenommen\n")
-            continue
-
-        # Interaktiv: Nachfragen
-        if not args.auto:
-            print("\n❓ Diese E-Mails in den Posteingang verschieben?")
-            response = input("   [J]a / [N]ein / [A]lle Accounts: ").strip().lower()
-
-            if response in ["n", "no", "nein"]:
-                print("⏭️  Übersprungen\n")
-                continue
-            elif response in ["a", "alle", "all"]:
-                args.auto = True  # Rest automatisch
-
-        # Wiederherstellen
-        restored = restore_emails(account, found)
-        total_restored += restored
-
-        print(f"\n✅ {restored} von {len(found)} E-Mail(s) wiederhergestellt")
-
-    # Zusammenfassung
     print("\n" + "=" * 60)
-    print("📊 ZUSAMMENFASSUNG")
-    print("=" * 60)
-    print(f"   Accounts geprüft: {len(EMAIL_ACCOUNTS)}")
-    print(f"   E-Mails gefunden: {total_found}")
+    print("✅ Fertig.")
+    print("=" * 60 + "\n")
 
-    if args.dry_run:
-        print("   Wiederhergestellt: 0 (DRY RUN)")
-    else:
-        print(f"   Wiederhergestellt: {total_restored}")
 
-    print("=" * 60)
-
-    if total_restored > 0:
-        print("\n✅ E-Mails erfolgreich wiederhergestellt!")
-        print("💡 TIPP: Prüfe deinen Posteingang in deinem E-Mail-Programm\n")
-    elif total_found > 0 and args.dry_run:
-        print("\n💡 Führe ohne --dry-run aus um E-Mails wiederherzustellen\n")
-    else:
-        print("\n✅ Nichts zu tun - alles in Ordnung!\n")
 
 
 if __name__ == "__main__":

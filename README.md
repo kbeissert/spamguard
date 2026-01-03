@@ -77,13 +77,17 @@ ollama pull ministral-3:14b
 
 ### 5. Verbindung testen & Filter starten
 
+**Per Doppelklick (macOS):**
+Einfach die Datei `start_spam_guard.command` im Projektordner doppelklicken.
+
 **Mit Makefile (empfohlen):**
 ```bash
-make test    # Verbindungstest (Ollama, LLM, IMAP)
-make run     # Spam-Filter starten
-make unspam  # Whitelist-E-Mails aus Spam wiederherstellen
-make folders # IMAP-Ordnerstruktur anzeigen
-make help    # Alle verfügbaren Befehle
+make start              # Spam-Filter starten
+make spam <adresse>     # Als Spam markieren (Blacklist)
+make unspam <adresse>   # Kein Spam (Whitelist + Wiederherstellen)
+make show-lists         # Alle Listen anzeigen
+make benchmark          # Benchmark starten
+make help               # Alle verfügbaren Befehle
 ```
 
 **Oder manuell:**
@@ -108,36 +112,29 @@ Manchmal werden wichtige E-Mails fälschlich als Spam markiert. Das **Unspam-Too
 ### Workflow
 
 1. **Nach Spam-Filter-Lauf**: Prüfe die Spam-Absender-Übersicht
-2. **Whitelist aktualisieren**: 
+2. **Whitelist aktualisieren & Wiederherstellen**: 
    ```bash
-   # Einfach mit Make-Befehl
-   make whitelist-add ENTRY=wichtig@firma.de
+   # Fügt zur Whitelist hinzu UND stellt E-Mails wieder her
+   make unspam wichtig@firma.de
    
-   # Oder ganze Domain
-   make whitelist-add ENTRY=firma.de
-   
-   # Oder manuell
-   echo "wichtig@firma.de" >> data/lists/whitelist.txt
-   ```
-3. **E-Mails wiederherstellen**:
-   ```bash
-   make unspam          # Interaktiv (mit Nachfrage)
-   make unspam-auto     # Automatisch (ohne Nachfrage)
-   make unspam-dry      # Nur anzeigen (Dry-Run)
+   # Auch für ganze Domains
+   make unspam firma.de
    ```
 
 ### Listen verwalten
 
 ```bash
 # Whitelist
-make whitelist-show                    # Anzeigen
-make whitelist-add ENTRY=email@test.de # Hinzufügen
-make whitelist-remove ENTRY=email@test.de # Entfernen
+make show-lists                        # Anzeigen
+make whitelist <adresse>               # Hinzufügen (ohne Restore)
 
 # Blacklist  
-make blacklist-show                    # Anzeigen
-make blacklist-add ENTRY=spam@bad.com  # Hinzufügen
-make blacklist-remove ENTRY=spam@bad.com # Entfernen
+make show-lists                        # Anzeigen
+make spam <adresse>                    # Hinzufügen
+
+# Entfernen (manuell oder per Script)
+python scripts/manage_lists.py whitelist remove email@test.de
+python scripts/manage_lists.py blacklist remove spam@bad.com
 ```
 
 Das Tool durchsucht alle Spam-Ordner, findet E-Mails von Whitelist-Absendern und verschiebt diese zurück in den Posteingang.

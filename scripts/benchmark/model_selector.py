@@ -31,11 +31,9 @@ def select_model() -> str:
         return None
 
     # Interactive selection
-    selected_model = questionary.select(
+    return questionary.select(
         "Select the model you want to use:", choices=available_models
     ).ask()
-
-    return selected_model
 
 
 if __name__ == "__main__":

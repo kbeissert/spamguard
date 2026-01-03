@@ -13,7 +13,7 @@ Trotz intelligenter Filter können manchmal wichtige E-Mails fälschlich als Spa
 ### 1. Spam-Filter ausführen
 
 ```bash
-make run
+make start
 ```
 
 Nach der Verarbeitung siehst du eine **Spam-Absender-Übersicht**:
@@ -33,28 +33,29 @@ Nach der Verarbeitung siehst du eine **Spam-Absender-Übersicht**:
    • Wichtige Mitteilung
 
 💡 TIPP: Falls eine E-Mail-Adresse fälschlich blockiert wurde:
-   1. Füge sie zur Whitelist hinzu: data/lists/whitelist.txt
-   2. Stelle E-Mails wieder her: make unspam
+   1. Stelle sie wieder her: make unspam <adresse>
 ════════════════════════════════════════════════════════════
 ```
 
-### 2. Whitelist aktualisieren
+### 2. Whitelist aktualisieren & Wiederherstellen
 
-Falls du siehst, dass `info@legitime-firma.de` fälschlich blockiert wurde:
+Falls du siehst, dass `info@legitime-firma.de` fälschlich blockiert wurde, kannst du sie mit einem Befehl zur Whitelist hinzufügen und sofort wiederherstellen:
 
 ```bash
-# Füge zur Whitelist hinzu
-echo "info@legitime-firma.de" >> data/lists/whitelist.txt
+# Einzelne Adresse
+make unspam info@legitime-firma.de
 
-# Oder die ganze Domain
-echo "legitime-firma.de" >> data/lists/whitelist.txt
+# Oder die ganze Domain (inkl. aller Subdomains)
+make unspam legitime-firma.de
 ```
 
-### 3. E-Mails wiederherstellen
+### 3. Manuelle Wiederherstellung (Interaktiv)
+
+Wenn du keine Adresse angibst, startet der interaktive Modus (stellt alle Mails von Whitelist-Absendern wieder her):
 
 #### Interaktiver Modus (Standard)
 ```bash
-make unspam
+python scripts/unspam.py
 ```
 
 Das Tool zeigt dir alle gefundenen E-Mails und fragt nach Bestätigung:
@@ -72,14 +73,14 @@ Das Tool zeigt dir alle gefundenen E-Mails und fragt nach Bestätigung:
 
 #### Automatischer Modus
 ```bash
-make unspam-auto
+python scripts/unspam.py --auto
 ```
 
 Stellt alle gefundenen E-Mails ohne Nachfrage wieder her.
 
 #### Dry-Run (nur anzeigen)
 ```bash
-make unspam-dry
+python scripts/unspam.py --dry-run
 ```
 
 Zeigt nur, was verschoben würde, ohne tatsächlich Änderungen vorzunehmen.

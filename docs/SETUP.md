@@ -43,7 +43,7 @@ Dieser Befehl:
 1.  Erstellt einen Ordner `.venv` im Projektverzeichnis.
 2.  Installiert alle benötigten Pakete (`pandas`, `requests`, `tqdm`, etc.) in dieses Environment.
 
-**Hinweis**: Du musst das Environment nicht manuell aktivieren. Alle `make`-Befehle (z.B. `make run`, `make benchmark`) nutzen automatisch das korrekte Python aus `.venv`.
+**Hinweis**: Du musst das Environment nicht manuell aktivieren. Alle `make`-Befehle (z.B. `make start`, `make benchmark`) nutzen automatisch das korrekte Python aus `.venv`.
 
 ---
 
