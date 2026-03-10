@@ -34,9 +34,10 @@ __pycache__/
 *.log
 spam_filter.log
 
-# Benchmark Results (nur README behalten)
+# Benchmark Results (nur README + Testdaten behalten)
 benchmark/*
 !benchmark/README.md
+!benchmark/test_emails.yaml
 
 # IDE & Editors
 .vscode/

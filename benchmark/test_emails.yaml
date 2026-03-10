@@ -1,0 +1,547 @@
+# =============================================================================
+# Spam-Guard Benchmark – Testdatensatz
+# =============================================================================
+#
+# Felder pro E-Mail:
+#   id:         Eindeutige Nummer
+#   category:   SPAM | HAM
+#   difficulty: easy | hard   (easy = offensichtlich, hard = täuschend)
+#   sender:     Absender-Adresse (realistische Spam-Adressen oder echte Domains)
+#   subject:    Betreff
+#   content:    E-Mail-Inhalt (Preview, max ~300 Zeichen)
+#
+# Verteilung: 50 E-Mails gesamt
+#   SPAM easy:  15  (IDs  1-15)
+#   SPAM hard:  10  (IDs 16-25)
+#   HAM  easy:  15  (IDs 26-40)
+#   HAM  hard:  10  (IDs 41-50)
+#
+# Schwerpunkt: Typische DE/EU-Phishing- und Spam-Muster
+# =============================================================================
+
+emails:
+
+  # ---------------------------------------------------------------------------
+  # SPAM – EINFACH (offensichtlich, klassische Muster)
+  # ---------------------------------------------------------------------------
+
+  - id: 1
+    category: SPAM
+    difficulty: easy
+    sender: gewinner@lottery-global-prize.com
+    subject: "Sie haben 1.000.000 € gewonnen!"
+    content: >
+      Herzlichen Glückwunsch! Sie wurden als Gewinner unserer internationalen
+      Lotterie ausgewählt. Um Ihren Preis von 1.000.000 Euro zu erhalten,
+      klicken Sie bitte auf den untenstehenden Link und geben Sie Ihre
+      Bankdaten ein.
+
+  - id: 2
+    category: SPAM
+    difficulty: easy
+    sender: sicherheit@sparkasse-verify-account.com
+    subject: "Dringend: Ihr Sparkasse-Konto wird gesperrt"
+    content: >
+      Sehr geehrter Kunde, aufgrund ungewöhnlicher Aktivitäten wird Ihr Konto
+      in 24 Stunden gesperrt. Bitte verifizieren Sie Ihre Identität sofort
+      unter folgendem Link: http://sparkasse-konto-verify.ru/login
+
+  - id: 3
+    category: SPAM
+    difficulty: easy
+    sender: info@dhl-zoll-gebuehr.net
+    subject: "DHL: Ihr Paket wartet – Zollgebühr 2,99 € ausstehend"
+    content: >
+      Wir konnten Ihr Paket (Sendungsnummer: 1234567890) nicht zustellen.
+      Eine Zollgebühr von 2,99 € ist noch offen. Bitte bezahlen Sie unter:
+      http://dhl-zoll-zahlung.xyz um die Lieferung freizugeben.
+
+  - id: 4
+    category: SPAM
+    difficulty: easy
+    sender: paypal-sicherheit@paypal-account-alert.com
+    subject: "PayPal: Ungewöhnliche Aktivität – Sofort handeln!"
+    content: >
+      Wir haben eine ungewöhnliche Anmeldung in Ihrem PayPal-Konto festgestellt.
+      Um Ihr Konto zu schützen, müssen Sie Ihre Daten sofort bestätigen.
+      Klicken Sie hier: http://paypal-secure-verify.net
+
+  - id: 5
+    category: SPAM
+    difficulty: easy
+    sender: rechnung@telekom-mahnung.info
+    subject: "Letzte Mahnung: Unbezahlte Telekom-Rechnung 149,99 €"
+    content: >
+      Ihre Rechnung vom November ist noch unbezahlt. Um eine gerichtliche
+      Mahnung zu vermeiden, zahlen Sie sofort 149,99 €. Bei Nichtbezahlung
+      wird Ihr Anschluss getrennt. Jetzt bezahlen: http://telekom-zahlung.ru
+
+  - id: 6
+    category: SPAM
+    difficulty: easy
+    sender: finanzamt-erstattung@steuerverwaltung-de.com
+    subject: "Steuererstattung 847 € – Jetzt beantragen"
+    content: >
+      Das Finanzamt hat eine Steuererstattung in Höhe von 847,00 € für Sie
+      festgestellt. Zur Auszahlung benötigen wir Ihre aktuellen Bankdaten.
+      Füllen Sie das Formular aus: http://finanzamt-erstattung.net/antrag
+
+  - id: 7
+    category: SPAM
+    difficulty: easy
+    sender: prince.ibrahim@nigeria-business.com
+    subject: "Dringende Geschäftsanfrage – Vertraulich"
+    content: >
+      Ich bin Prinz Ibrahim aus Nigeria. Ich benötige Ihre Hilfe bei der
+      Überweisung von 15 Millionen Dollar. Sie erhalten 20% Provision.
+      Diese Transaktion ist völlig legal und sicher. Bitte antworten Sie diskret.
+
+  - id: 8
+    category: SPAM
+    difficulty: easy
+    sender: support@microsoft-pc-alert.com
+    subject: "WARNUNG: Ihr Computer ist mit einem Virus infiziert"
+    content: >
+      Wir haben auf Ihrem PC einen gefährlichen Virus entdeckt. Rufen Sie
+      sofort unseren Microsoft-Support an: 0800-123456. Warten Sie nicht,
+      Ihre Daten und Ihr Bankkonto sind in Gefahr!
+
+  - id: 9
+    category: SPAM
+    difficulty: easy
+    sender: info@amazon-konto-verifizierung.net
+    subject: "Amazon: Ihr Konto wurde vorübergehend eingeschränkt"
+    content: >
+      Liebes Amazon-Mitglied, Ihr Konto wurde aus Sicherheitsgründen gesperrt.
+      Um es wiederherzustellen, bestätigen Sie bitte Ihre Zahlungsdaten unter:
+      http://amazon-konto-entsperren.info/verify
+
+  - id: 10
+    category: SPAM
+    difficulty: easy
+    sender: krypto@bitcoin-invest-profit.com
+    subject: "Elon Musk empfiehlt: 500 € investieren, 5.000 € verdienen!"
+    content: >
+      Diese exklusive Investitionsmöglichkeit verdoppelt Ihr Geld in 48 Stunden.
+      Bereits 10.000 Deutsche haben davon profitiert. Starten Sie jetzt mit
+      nur 500 € und sehen Sie, wie Ihr Geld arbeitet!
+
+  - id: 11
+    category: SPAM
+    difficulty: easy
+    sender: mahnung@inkasso-deutschland-gmbh.cc
+    subject: "Inkasso: Letzte Warnung vor Pfändung – Az. 2024/98765"
+    content: >
+      Trotz mehrfacher Mahnungen haben Sie Ihre Schulden in Höhe von 389,50 €
+      nicht beglichen. Wir werden nun das Pfändungsverfahren einleiten.
+      Um dies zu vermeiden, zahlen Sie innerhalb von 24 Stunden.
+
+  - id: 12
+    category: SPAM
+    difficulty: easy
+    sender: abnehmen@diät-wunder-pille.shop
+    subject: "Ärzte hassen ihn: 10 kg in 2 Wochen abnehmen!"
+    content: >
+      Dieses revolutionäre Diätmittel wird in deutschen Krankenhäusern
+      verboten! Abnehmen ohne Sport und Diät – garantiert. Bestellen Sie
+      jetzt und erhalten Sie 50% Rabatt auf die erste Bestellung.
+
+  - id: 13
+    category: SPAM
+    difficulty: easy
+    sender: dating@singleboerse-heisse-frauen.com
+    subject: "Maria (32) aus München möchte Sie kennenlernen"
+    content: >
+      Maria hat Ihr Profil gesehen und ist sofort verliebt! Sie wartet auf
+      Ihre Nachricht. Melden Sie sich jetzt kostenlos an und chatten Sie
+      mit tausenden Singles aus Ihrer Region.
+
+  - id: 14
+    category: SPAM
+    difficulty: easy
+    sender: enbw-rechnung@energieversorger-mahnung.com
+    subject: "Ihre EnBW-Rechnung – Zahlung überfällig – Sperrung droht"
+    content: >
+      Sehr geehrter Kunde, Ihre Stromrechnung über 234,00 € ist seit
+      30 Tagen überfällig. Um eine Sperrung Ihres Anschlusses zu vermeiden,
+      überweisen Sie den Betrag bis morgen oder klicken Sie hier zur
+      Online-Zahlung.
+
+  - id: 15
+    category: SPAM
+    difficulty: easy
+    sender: info@viagra-bestellen-deutschland.net
+    subject: "Viagra ohne Rezept – diskret und günstig"
+    content: >
+      Kaufen Sie Potenzmittel ohne Rezept direkt aus Europa. Diskrete
+      Lieferung in neutraler Verpackung innerhalb von 2-3 Werktagen.
+      100% Original. Beste Preise. Jetzt bestellen!
+
+  # ---------------------------------------------------------------------------
+  # SPAM – SCHWER (täuschend echt, professionell formuliert)
+  # ---------------------------------------------------------------------------
+
+  - id: 16
+    category: SPAM
+    difficulty: hard
+    sender: buchhaltung@mueller-consulting.de.invoice-system.net
+    subject: "Re: Rechnung 2024-1147 wie besprochen"
+    content: >
+      Hallo, anbei die aktualisierte Rechnung wie in unserem letzten Gespräch
+      vereinbart. Bitte überweisen Sie den Betrag bis Ende der Woche.
+      Die Rechnung finden Sie im Anhang (Rechnung_2024-1147.zip).
+
+  - id: 17
+    category: SPAM
+    difficulty: hard
+    sender: sicherheit@kundenkonto-alert.de
+    subject: "Sicherheitswarnung: Anmeldung von unbekanntem Gerät"
+    content: >
+      Wir haben eine Anmeldung an Ihrem Konto von einem unbekannten Gerät
+      festgestellt (IP: 185.220.101.45, Russland). Falls Sie das nicht waren,
+      sichern Sie Ihr Konto sofort: http://konto-sichern.de/verify
+
+  - id: 18
+    category: SPAM
+    difficulty: hard
+    sender: hr-umfrage@mitarbeiter-befragung-2024.com
+    subject: "Wichtig: Jährliche Mitarbeiterzufriedenheitsumfrage"
+    content: >
+      Liebe Kolleginnen und Kollegen, bitte nehmen Sie sich 5 Minuten Zeit
+      für die jährliche Mitarbeiterbefragung. Loggen Sie sich mit Ihren
+      Firmenzugangsdaten ein: https://umfrage-portal-hr.net/login
+
+  - id: 19
+    category: SPAM
+    difficulty: hard
+    sender: lieferung@hermes-sendungsstatus.info
+    subject: "Hermes: Ihre Sendung wartet auf Abholung – Aktion erforderlich"
+    content: >
+      Ihre Sendung HS1234567890DE konnte nicht zugestellt werden, da niemand
+      anwesend war. Bitte wählen Sie einen neuen Liefertermin oder hinterlegen
+      Sie einen sicheren Ablageplatz: http://hermes-lieferoptionen.net
+
+  - id: 20
+    category: SPAM
+    difficulty: hard
+    sender: partner@seo-marketing-solutions.biz
+    subject: "Zusammenarbeit: Wir könnten Ihnen helfen, 300% mehr Anfragen zu generieren"
+    content: >
+      Guten Tag, ich bin auf Ihre Website gestoßen und bin überzeugt, dass
+      unsere SEO-Strategie Ihnen helfen kann. Wir haben bereits über 500
+      Kunden in Deutschland auf Seite 1 bei Google gebracht. Darf ich Ihnen
+      eine kostenlose Analyse zusenden?
+
+  - id: 21
+    category: SPAM
+    difficulty: hard
+    sender: apple-id@apple-konto-service.com
+    subject: "Apple ID: Ihre ID wurde aus Sicherheitsgründen gesperrt"
+    content: >
+      Ihre Apple ID wurde gesperrt, weil mehrere fehlgeschlagene
+      Anmeldeversuche festgestellt wurden. Um den Zugriff wiederherzustellen,
+      bestätigen Sie Ihre Angaben: https://appleid-verify.support/de/unlock
+
+  - id: 22
+    category: SPAM
+    difficulty: hard
+    sender: stadtwerke-abrechnung@stadtwerke-kundenportal.net
+    subject: "Ihre Jahresabrechnung 2024 – Nachzahlung 312 €"
+    content: >
+      Sehr geehrter Kunde, Ihre Jahresabrechnung 2024 liegt bereit. Es ergibt
+      sich eine Nachzahlung von 312,00 €. Bitte zahlen Sie innerhalb von
+      14 Tagen oder aktualisieren Sie Ihre Lastschriftdaten:
+      http://stadtwerke-zahlung.info/abrechnung
+
+  - id: 23
+    category: SPAM
+    difficulty: hard
+    sender: gewinnspiel@rewe-kundenaktion-2024.com
+    subject: "Glückwunsch! Sie wurden für unser Gewinnspiel ausgewählt"
+    content: >
+      Als treuer REWE-Kunde haben Sie an unserer Kundenaktion teilgenommen
+      und wurden ausgelost! Bestätigen Sie Ihre Teilnahme bis morgen und
+      gewinnen Sie einen Einkaufsgutschein im Wert von 500 €.
+      Zur Bestätigung benötigen wir Ihre Adresse und Bankverbindung.
+
+  - id: 24
+    category: SPAM
+    difficulty: hard
+    sender: no-reply@vodafone-rechnung-online.net
+    subject: "Ihre Vodafone Rechnung März 2026 – 0,00 € – Handlung erforderlich"
+    content: >
+      Sehr geehrter Kunde, Ihre aktuelle Rechnung steht bereit. Aufgrund eines
+      technischen Problems konnten wir Ihre Zahlung nicht verarbeiten.
+      Bitte aktualisieren Sie Ihre Zahlungsdaten: http://vodafone-zahlung.ru/update
+
+  - id: 25
+    category: SPAM
+    difficulty: hard
+    sender: bewerbung@jobangebot-homeoffice-deutschland.de
+    subject: "Stellenangebot: 3.500 € im Monat – nur 2-3 Stunden täglich"
+    content: >
+      Wir suchen Mitarbeiter für die Heimarbeit. Verdienen Sie 3.500 € monatlich
+      bei nur 2-3 Stunden Arbeit täglich. Kein Vorwissen nötig. Vollständig
+      legal und seriös. Melden Sie sich jetzt für ein kostenloses Gespräch an.
+
+  # ---------------------------------------------------------------------------
+  # HAM – EINFACH (eindeutig legitim)
+  # ---------------------------------------------------------------------------
+
+  - id: 26
+    category: HAM
+    difficulty: easy
+    sender: anna.mueller@firma.de
+    subject: "Teammeeting morgen 10 Uhr"
+    content: >
+      Hallo zusammen, kurze Erinnerung: Morgen findet unser wöchentliches
+      Teammeeting um 10:00 Uhr im Konferenzraum 3 statt. Agenda: Q1-Planung
+      und Budgetbesprechung. Bitte bis heute Abend Tagesordnungspunkte einreichen.
+
+  - id: 27
+    category: HAM
+    difficulty: easy
+    sender: thomas.wolf@partnerfirma.com
+    subject: "Projekt Alpha – Statusbericht KW 10"
+    content: >
+      Hallo, anbei der aktuelle Statusbericht für Projekt Alpha. Wir liegen
+      im Zeitplan. Die Entwicklung ist zu 80% abgeschlossen, Tests beginnen
+      nächste Woche. Bitte gebt mir Feedback bis Freitag.
+
+  - id: 28
+    category: HAM
+    difficulty: easy
+    sender: bestellung@amazon.de
+    subject: "Ihre Bestellung #302-1234567-8901234 wurde versendet"
+    content: >
+      Guten Tag, Ihre Bestellung wurde versandt. Ihre Sendungsnummer bei DHL
+      lautet 1234567890. Die voraussichtliche Lieferung ist für morgen geplant.
+      Sie können Ihr Paket unter dhl.de verfolgen.
+
+  - id: 29
+    category: HAM
+    difficulty: easy
+    sender: no-reply@booking.com
+    subject: "Buchungsbestätigung: Hotel Vier Jahreszeiten München, 15.-17.03."
+    content: >
+      Ihre Buchung ist bestätigt! Hotel Vier Jahreszeiten München,
+      Check-in: 15. März 2026, Check-out: 17. März 2026. Zimmertyp: Doppelzimmer.
+      Buchungsnummer: BK-7829341. Bei Fragen wenden Sie sich an das Hotel direkt.
+
+  - id: 30
+    category: HAM
+    difficulty: easy
+    sender: service@dhl.de
+    subject: "Ihre DHL-Sendung 123456789 wird heute zugestellt"
+    content: >
+      Guten Morgen, Ihre Sendung kommt heute zwischen 10:00 und 12:00 Uhr an.
+      Sendungsnummer: 1234567890. Falls Sie nicht zu Hause sind, können Sie
+      unter mein.dhl.de einen Ersatzzustellort festlegen.
+
+  - id: 31
+    category: HAM
+    difficulty: easy
+    sender: praxis@dr-meier-allgemeinmedizin.de
+    subject: "Terminerinnerung: Ihr Arzttermin am 12.03.2026 um 14:30 Uhr"
+    content: >
+      Sehr geehrte/r Patient/in, wir möchten Sie an Ihren Termin bei uns am
+      12.03.2026 um 14:30 Uhr erinnern. Bei Verhinderung bitten wir Sie,
+      den Termin mindestens 24 Stunden vorher abzusagen: 089-1234567.
+
+  - id: 32
+    category: HAM
+    difficulty: easy
+    sender: sarah.schmidt@kollegen-firma.de
+    subject: "Geburtstagswünsche 🎂"
+    content: >
+      Hallo! Ich wollte Dir nur kurz zum Geburtstag gratulieren – alles Gute!
+      Hoffe, Du feierst schön mit Familie und Freunden. Wir sehen uns dann
+      nächste Woche im Büro!
+
+  - id: 33
+    category: HAM
+    difficulty: easy
+    sender: ticket-system@helpdesk.firma.de
+    subject: "Ticket #44521 erstellt: VPN-Zugang funktioniert nicht"
+    content: >
+      Ihr Support-Ticket wurde erfolgreich erstellt. Ticket-ID: #44521.
+      Beschreibung: VPN-Verbindung schlägt fehl seit heute Morgen.
+      Ein Mitarbeiter wird sich innerhalb von 4 Stunden bei Ihnen melden.
+
+  - id: 34
+    category: HAM
+    difficulty: easy
+    sender: noreply@github.com
+    subject: "[GitHub] A new public key was added to your account"
+    content: >
+      Hey, a new public key was added to your GitHub account. If you did not
+      perform this action, please remove the key and consider changing your
+      password. View your SSH keys: github.com/settings/keys
+
+  - id: 35
+    category: HAM
+    difficulty: easy
+    sender: newsletter@heise.de
+    subject: "heise online – Die wichtigsten Meldungen vom 10.03.2026"
+    content: >
+      Die Top-Themen heute: KI-Regulierung in der EU, neues iPhone-Modell
+      angekündigt, Sicherheitslücke in populärer VPN-Software geschlossen.
+      Links zu allen Artikeln auf heise.de. Newsletter abbestellen jederzeit möglich.
+
+  - id: 36
+    category: HAM
+    difficulty: easy
+    sender: buchhaltung@steuerberater-kanzlei.de
+    subject: "Kontoumsätze Februar 2026 – bitte prüfen"
+    content: >
+      Sehr geehrter Mandant, anbei die Kontoumsätze für Februar 2026 zur
+      Abstimmung. Bitte prüfen Sie, ob alle Buchungen korrekt sind, und
+      geben Sie mir bis Ende der Woche Rückmeldung. Bei Fragen: 030-9876543.
+
+  - id: 37
+    category: HAM
+    difficulty: easy
+    sender: max.mustermann@freunde-gruppe.de
+    subject: "Grillparty am Samstag – Kommt ihr?"
+    content: >
+      Hey Leute, ich mache am Samstag ab 15 Uhr eine Grillparty im Garten.
+      Wäre super wenn ihr kommen könntet! Bitte gebt kurz Bescheid ob ihr
+      dabei seid. Getränke sind vorhanden, jeder bringt etwas zum Grillen mit.
+
+  - id: 38
+    category: HAM
+    difficulty: easy
+    sender: no-reply@netflix.com
+    subject: "Ihre Netflix-Rechnung für März 2026: 17,99 €"
+    content: >
+      Ihre monatliche Netflix-Zahlung wurde erfolgreich verarbeitet.
+      Betrag: 17,99 € (Standard-Abo). Nächstes Abrechnungsdatum: 10. April 2026.
+      Ihr Konto verwalten: netflix.com/account
+
+  - id: 39
+    category: HAM
+    difficulty: easy
+    sender: info@vhs-muenchen.de
+    subject: "Kursbestätigung: Spanisch für Anfänger, startet 17.03.2026"
+    content: >
+      Sehr geehrte/r Teilnehmer/in, wir bestätigen Ihre Anmeldung für den Kurs
+      'Spanisch für Anfänger' (Kurs-Nr. SPA-2026-03-A). Der Kurs beginnt am
+      17.03.2026 um 18:30 Uhr im Raum 214. Kursgebühr: 89 €, bereits bezahlt.
+
+  - id: 40
+    category: HAM
+    difficulty: easy
+    sender: no-reply@sparkasse.de
+    subject: "Ihr Kontoauszug Februar 2026 ist verfügbar"
+    content: >
+      Ihr Kontoauszug für Februar 2026 steht in Ihrem Online-Banking
+      zum Download bereit. Melden Sie sich unter sparkasse.de/banking an,
+      um Ihren Auszug einzusehen. Diese E-Mail enthält keine Links zu Login-Seiten.
+
+  # ---------------------------------------------------------------------------
+  # HAM – SCHWER (könnten fälschlich als Spam erkannt werden)
+  # ---------------------------------------------------------------------------
+
+  - id: 41
+    category: HAM
+    difficulty: hard
+    sender: no-reply@accounts.google.com
+    subject: "Passwort zurücksetzen – Ihr Google-Konto"
+    content: >
+      Sie haben das Zurücksetzen Ihres Passworts angefordert. Verwenden Sie
+      diesen Link, um ein neues Passwort festzulegen. Der Link ist 24 Stunden
+      gültig. Falls Sie das nicht angefordert haben, können Sie diese E-Mail
+      ignorieren.
+
+  - id: 42
+    category: HAM
+    difficulty: hard
+    sender: newsletter@zalando.de
+    subject: "Nur heute: 30% auf alles – Frühlings-Sale hat begonnen!"
+    content: >
+      Der Frühlings-Sale ist gestartet! Sichern Sie sich heute 30% Rabatt
+      auf Tausende Artikel. Gültig bis Mitternacht. Kostenloser Versand ab
+      24,95 €. Newsletter abbestellen: zalando.de/account/newsletter
+
+  - id: 43
+    category: HAM
+    difficulty: hard
+    sender: it-monitoring@intern.firma.de
+    subject: "KRITISCH: Produktionsdatenbank antwortet nicht – sofortiger Eingriff nötig"
+    content: >
+      ALERT: Der Produktionsserver db-prod-01 ist nicht erreichbar.
+      CPU-Last 100%, Arbeitsspeicher voll. Letzte erfolgreiche Verbindung
+      vor 3 Minuten. Alle Dienste betroffen. Bitte sofort eingreifen!
+
+  - id: 44
+    category: HAM
+    difficulty: hard
+    sender: bewerbung@max-mustermann-portfolio.de
+    subject: "Bewerbung als Senior Python Developer – Max Mustermann"
+    content: >
+      Sehr geehrte Damen und Herren, hiermit bewerbe ich mich für die
+      ausgeschriebene Stelle als Senior Python Developer. Ich bringe 8 Jahre
+      Erfahrung mit. Mein Lebenslauf ist im Anhang (CV_Mustermann.pdf).
+
+  - id: 45
+    category: HAM
+    difficulty: hard
+    sender: buchhaltung@lieferant-gmbh.de
+    subject: "Freundliche Erinnerung: Rechnung RE-2026-0234 fällig am 15.03."
+    content: >
+      Hallo, wir möchten Sie freundlich daran erinnern, dass unsere Rechnung
+      RE-2026-0234 über 1.450,00 € netto am 15.03.2026 fällig ist.
+      Bitte teilen Sie uns mit, falls der Betrag bereits überwiesen wurde.
+
+  - id: 46
+    category: HAM
+    difficulty: hard
+    sender: sicherheit@sparkasse.de
+    subject: "Wichtige Sicherheitsinformation zu Ihrem Konto"
+    content: >
+      Sehr geehrter Kunde, wir informieren Sie über neue Sicherheitsfunktionen
+      in Ihrem Online-Banking. Ab dem 01.04.2026 ist die pushTAN-App für alle
+      Transaktionen über 500 € verpflichtend. Weitere Infos: sparkasse.de/sicherheit
+      (kein Login-Link in dieser E-Mail enthalten).
+
+  - id: 47
+    category: HAM
+    difficulty: hard
+    sender: kuendigung@fitnessstudio-muenchen.de
+    subject: "Bestätigung Ihrer Kündigung – Mitgliedschaft endet 31.03.2026"
+    content: >
+      Sehr geehrtes Mitglied, wir bestätigen den Eingang Ihrer Kündigung.
+      Ihre Mitgliedschaft endet zum 31.03.2026. Alle noch ausstehenden
+      Beiträge werden wie gewohnt abgebucht. Wir würden uns freuen, Sie
+      bald wieder als Mitglied zu begrüßen.
+
+  - id: 48
+    category: HAM
+    difficulty: hard
+    sender: auto-confirm@ebay-kleinanzeigen.de
+    subject: "Neue Nachricht von Käufer zu Ihrer Anzeige: MacBook Pro"
+    content: >
+      Sie haben eine neue Nachricht erhalten. Käufer: peter_m_85 schreibt:
+      "Hallo, ist das MacBook noch verfügbar? Würde es gerne für 1.100 €
+      kaufen und kann es morgen Abend abholen." Antworten Sie unter:
+      kleinanzeigen.de/nachrichten
+
+  - id: 49
+    category: HAM
+    difficulty: hard
+    sender: no-reply@strato.de
+    subject: "Ihre Domain meinefirma.de läuft in 30 Tagen ab – Verlängerung empfohlen"
+    content: >
+      Sehr geehrter Kunde, Ihre Domain meinefirma.de läuft am 10. April 2026
+      ab. Um die Domain zu behalten, verlängern Sie diese bitte rechtzeitig
+      in Ihrem STRATO-Kundenbereich. Aktuelle Preise: strato.de/domain
+
+  - id: 50
+    category: HAM
+    difficulty: hard
+    sender: no-reply@datev.de
+    subject: "DATEV Unternehmen online: 3 neue Belege zur Buchung bereit"
+    content: >
+      In Ihrem DATEV Unternehmen online-Posteingang liegen 3 neue Belege
+      zur Prüfung und Freigabe bereit. Bitte melden Sie sich an, um die
+      Dokumente zu verarbeiten: mein.datev.de/unternehmen-online
