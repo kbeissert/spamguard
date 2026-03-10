@@ -2,10 +2,12 @@
 """
 Ollama Spam Guard - IMAP Spam Filter mit lokalem LLM (qwen2.5:14b-instruct via Ollama)
 
-3-stufige Spam-Erkennung:
+5-stufige Spam-Erkennung:
 1. Whitelist-Check (höchste Priorität) → kein Spam
 2. Blacklist-Check mit externen Spam-Listen → Spam
-3. LLM-Analyse via Ollama (nur falls nicht in Listen)
+3. E-Mail-Authentifizierung (SPF/DKIM fail) → Spam
+4. DNSBL-Echtzeit-Lookup der Sender-IP → Spam
+5. LLM-Analyse via Ollama (nur falls alle vorherigen Stufen kein Ergebnis)
 
 Features:
 - Multi-Account Support (IMAP)
@@ -46,7 +48,13 @@ from config import (
     PROJECT_ROOT,
 )
 from list_manager import ListManager
-from utils import decode_header_safe, extract_body_preview
+from utils import (
+    decode_header_safe,
+    extract_body_preview,
+    extract_auth_results,
+    extract_sender_ip,
+    check_dnsbl,
+)
 from constants import (
     EMAIL_PREVIEW_MAX_LENGTH,
     LLM_INFERENCE_TIMEOUT,
@@ -345,19 +353,26 @@ def _query_ollama_for_spam(prompt: str) -> Tuple[bool, str]:
 
 
 def detect_spam(
-    sender: str, subject: str, body: str, list_manager: Optional[ListManager] = None
+    sender: str,
+    subject: str,
+    body: str,
+    list_manager: Optional[ListManager] = None,
+    msg: Optional[email.message.Message] = None,
 ) -> Tuple[bool, str]:
     """
-    Analysiert E-Mail mit 3-stufigem Ansatz:
+    Analysiert E-Mail mit 5-stufigem Ansatz:
     1. Whitelist-Check (höchste Priorität) → kein Spam
-    2. Blacklist-Check → Spam
-    3. LLM-Analyse via Ollama (falls nicht in Listen)
+    2. Blacklist-Check (statische Listen) → Spam
+    3. E-Mail-Authentifizierung (SPF+DKIM fail) → Spam
+    4. DNSBL-Echtzeit-Lookup der Sender-IP → Spam
+    5. LLM-Analyse via Ollama (nur falls alle vorherigen Stufen kein Ergebnis)
 
     Args:
         sender: Absender-E-Mail
         subject: E-Mail-Betreff
         body: E-Mail-Body (Preview)
         list_manager: Optionaler ListManager für Whitelist/Blacklist Checks
+        msg: Optionales geparste Message-Objekt für Header-Analyse
 
     Returns:
         Tuple[bool, str]: (is_spam, reason)
@@ -367,8 +382,39 @@ def detect_spam(
     if list_result is not None:
         return list_result
 
-    # STUFE 3: LLM-basierte Spam-Erkennung
-    prompt = _build_spam_detection_prompt(sender, subject, body)
+    # STUFE 3: E-Mail-Authentifizierung (SPF/DKIM aus Authentication-Results Header)
+    if msg is not None:
+        auth = extract_auth_results(msg)
+        spf_fail = auth["spf"] in ("fail", "softfail")
+        dkim_fail = auth["dkim"] == "fail"
+        if spf_fail and dkim_fail:
+            reason = f"SPF={auth['spf']}, DKIM=fail – Authentifizierung komplett gescheitert"
+            logging.info(f"Auth-Fail erkannt: {sender} → {reason}")
+            return True, reason
+        elif spf_fail or dkim_fail:
+            # Einzelner Fehler: nur als Hinweis im LLM-Prompt vermerken
+            auth_hint = f"[AUTH-WARNUNG: SPF={auth['spf']}, DKIM={auth['dkim']}] "
+        else:
+            auth_hint = ""
+
+        # STUFE 4: DNSBL-Echtzeit-Lookup der Sender-IP
+        sender_ip = extract_sender_ip(msg)
+        if sender_ip:
+            dnsbl_hit = check_dnsbl(sender_ip)
+            if dnsbl_hit:
+                reason = f"Sender-IP {sender_ip} in {dnsbl_hit} gelistet"
+                logging.info(f"DNSBL-Treffer: {sender} ({sender_ip}) → {reason}")
+                return True, reason
+    else:
+        auth_hint = ""
+
+    # STUFE 5: LLM-basierte Spam-Erkennung
+    # auth_hint wird dem Prompt vorangestellt, falls SPF oder DKIM einzeln fehlschlugen
+    prompt = _build_spam_detection_prompt(
+        sender,
+        auth_hint + subject if auth_hint else subject,
+        body,
+    )
     return _query_ollama_for_spam(prompt)
 
 
@@ -421,9 +467,9 @@ def _process_single_email(
             f"   Betreff: {subject[:MAX_EMAIL_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_EMAIL_SUBJECT_LENGTH else ''}"
         )
 
-        # LLM-Analyse
+        # LLM-Analyse (mit msg-Objekt für Header-Analyse)
         is_spam, reason = detect_spam(
-            sender, subject, body_preview, list_manager=list_manager
+            sender, subject, body_preview, list_manager=list_manager, msg=msg
         )
 
         if is_spam:
