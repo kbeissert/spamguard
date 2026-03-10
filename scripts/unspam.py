@@ -15,7 +15,6 @@ Datum: 2025-11-20
 """
 
 import sys
-import imaplib
 import email
 import logging
 import argparse
@@ -28,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from config import EMAIL_ACCOUNTS, LOG_PATH
 from list_manager import get_list_manager
 from utils import decode_header_safe
+from imap_utils import imap_connection
 
 # Constants
 MAX_SUBJECT_LENGTH = 60
@@ -38,21 +38,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-
-
-def connect_imap(account: Dict[str, str]) -> imaplib.IMAP4_SSL:
-    """
-    Verbindet zum IMAP-Server.
-
-    Args:
-        account: Account-Konfiguration
-
-    Returns:
-        IMAP4_SSL: Verbundenes Mail-Objekt
-    """
-    mail = imaplib.IMAP4_SSL(account["server"], int(account["port"]))
-    mail.login(account["user"], account["password"])
-    return mail
 
 
 def find_whitelisted_spam(account: Dict[str, str]) -> List[Dict]:
@@ -68,83 +53,68 @@ def find_whitelisted_spam(account: Dict[str, str]) -> List[Dict]:
     found_emails = []
 
     try:
-        print(f"\n🔌 Verbinde zu {account['server']}...")
-        mail = connect_imap(account)
+        # Use context manager for guaranteed cleanup
+        with imap_connection(account, select_folder=account["spam_folder"]) as mail:
+            # Suche alle E-Mails im Spam-Ordner (UIDs für session-übergreifende Stabilität)
+            print("🔍 Durchsuche Spam-Ordner...")
+            status, data = mail.uid("search", None, "ALL")
 
-        # Wähle Spam-Ordner
-        print(f"📁 Öffne Spam-Ordner '{account['spam_folder']}'...")
-        status, _ = mail.select(account["spam_folder"])
+            if status != "OK":
+                print("❌ Suche fehlgeschlagen")
+                return found_emails
 
-        if status != "OK":
-            print(f"⚠️  Spam-Ordner '{account['spam_folder']}' nicht gefunden!")
-            logging.warning(
-                f"Spam-Ordner nicht gefunden: {account['spam_folder']} ({account['name']})"
-            )
-            return found_emails
+            email_ids = data[0].split()
 
-        # Suche alle E-Mails im Spam-Ordner
-        print("🔍 Durchsuche Spam-Ordner...")
-        status, data = mail.search(None, "ALL")
+            if not email_ids:
+                print("✅ Spam-Ordner ist leer")
+                return found_emails
 
-        if status != "OK":
-            print("❌ Suche fehlgeschlagen")
-            return found_emails
+            print(f"📧 Prüfe {len(email_ids)} E-Mail(s) gegen Whitelist...\n")
 
-        email_ids = data[0].split()
+            # Lade ListManager für Whitelist-Check
+            list_manager = get_list_manager()
 
-        if not email_ids:
-            print("✅ Spam-Ordner ist leer")
-            return found_emails
+            # Prüfe jede E-Mail
+            for email_id in email_ids:
+                try:
+                    # Hole E-Mail per UID
+                    status, msg_data = mail.uid("fetch", email_id, "(RFC822)")
+                    if status != "OK":
+                        continue
 
-        print(f"📧 Prüfe {len(email_ids)} E-Mail(s) gegen Whitelist...\n")
+                    # Parse E-Mail
+                    msg = email.message_from_bytes(msg_data[0][1])
 
-        # Lade ListManager für Whitelist-Check
-        list_manager = get_list_manager()
+                    # Extrahiere Absender
+                    sender = email.utils.parseaddr(msg.get("From", ""))[1] or "Unbekannt"
+                    subject = decode_header_safe(msg.get("Subject", "Kein Betreff"))
+                    date = msg.get("Date", "Unbekanntes Datum")
 
-        # Prüfe jede E-Mail
-        for email_id in email_ids:
-            try:
-                # Hole E-Mail
-                status, msg_data = mail.fetch(email_id, "(RFC822)")
-                if status != "OK":
+                    # Prüfe gegen Whitelist
+                    is_spam, reason = list_manager.check_email(sender)
+
+                    # Nur wiederherstellen, wenn explizit auf der Whitelist!
+                    # check_email gibt (False, None) zurück, wenn die Mail weder auf White- noch Blacklist ist.
+                    if is_spam is False and reason and reason.startswith("Whitelist"):
+                        print(f"✅ Gefunden: {sender}")
+                        print(
+                            f"   Betreff: {subject[:MAX_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_SUBJECT_LENGTH else ''}"
+                        )
+                        print(f"   Grund: {reason}")
+
+                        found_emails.append(
+                            {
+                                "id": email_id,
+                                "sender": sender,
+                                "subject": subject,
+                                "date": date,
+                                "reason": reason,
+                            }
+                        )
+
+                except Exception as e:
+                    logging.error(f"Fehler beim Prüfen von E-Mail ID {email_id}: {e}")
                     continue
-
-                # Parse E-Mail
-                msg = email.message_from_bytes(msg_data[0][1])
-
-                # Extrahiere Absender
-                sender = email.utils.parseaddr(msg.get("From", ""))[1] or "Unbekannt"
-                subject = decode_header_safe(msg.get("Subject", "Kein Betreff"))
-                date = msg.get("Date", "Unbekanntes Datum")
-
-                # Prüfe gegen Whitelist
-                is_spam, reason = list_manager.check_email(sender)
-
-                # Nur wiederherstellen, wenn explizit auf der Whitelist!
-                # check_email gibt (False, None) zurück, wenn die Mail weder auf White- noch Blacklist ist.
-                if is_spam is False and reason and reason.startswith("Whitelist"):
-                    print(f"✅ Gefunden: {sender}")
-                    print(
-                        f"   Betreff: {subject[:MAX_SUBJECT_LENGTH]}{'...' if len(subject) > MAX_SUBJECT_LENGTH else ''}"
-                    )
-                    print(f"   Grund: {reason}")
-
-                    found_emails.append(
-                        {
-                            "id": email_id,
-                            "sender": sender,
-                            "subject": subject,
-                            "date": date,
-                            "reason": reason,
-                        }
-                    )
-
-            except Exception as e:
-                logging.error(f"Fehler beim Prüfen von E-Mail ID {email_id}: {e}")
-                continue
-
-        mail.close()
-        mail.logout()
 
     except Exception as e:
         print(f"❌ Fehler: {e}")
@@ -173,42 +143,35 @@ def restore_emails(account: Dict[str, str], emails: List[Dict]) -> int:
 
     try:
         print(f"\n🔄 Stelle {len(emails)} E-Mail(s) wieder her...\n")
-        mail = connect_imap(account)
 
-        # Wähle Spam-Ordner
-        mail.select(account["spam_folder"])
+        # Use context manager for guaranteed cleanup
+        with imap_connection(account, select_folder=account["spam_folder"]) as mail:
+            for email_data in emails:
+                try:
+                    email_id = email_data["id"]
 
-        for email_data in emails:
-            try:
-                email_id = email_data["id"]
+                    # Kopiere zurück in INBOX per UID
+                    status, _ = mail.uid("copy", email_id, "INBOX")
 
-                # Kopiere zurück in INBOX
-                status, _ = mail.copy(email_id, "INBOX")
+                    if status == "OK":
+                        # Lösche aus Spam-Ordner per UID
+                        mail.uid("store", email_id, "+FLAGS", "\\Deleted")
 
-                if status == "OK":
-                    # Lösche aus Spam-Ordner
-                    mail.store(email_id, "+FLAGS", "\\Deleted")
+                        print(f"✅ Wiederhergestellt: {email_data['sender']}")
+                        print(
+                            f"   Betreff: {email_data['subject'][:MAX_SUBJECT_LENGTH]}{'...' if len(email_data['subject']) > MAX_SUBJECT_LENGTH else ''}"
+                        )
 
-                    print(f"✅ Wiederhergestellt: {email_data['sender']}")
-                    print(
-                        f"   Betreff: {email_data['subject'][:MAX_SUBJECT_LENGTH]}{'...' if len(email_data['subject']) > MAX_SUBJECT_LENGTH else ''}"
-                    )
+                        logging.info(
+                            f"E-Mail wiederhergestellt: {email_data['subject']} von {email_data['sender']} ({account['name']})"
+                        )
+                        restored_count += 1
+                    else:
+                        print(f"⚠️  Fehler bei: {email_data['sender']}")
 
-                    logging.info(
-                        f"E-Mail wiederhergestellt: {email_data['subject']} von {email_data['sender']} ({account['name']})"
-                    )
-                    restored_count += 1
-                else:
-                    print(f"⚠️  Fehler bei: {email_data['sender']}")
-
-            except Exception as e:
-                print(f"❌ Fehler bei {email_data['sender']}: {e}")
-                logging.error(f"Fehler beim Wiederherstellen: {e}")
-
-        # Cleanup
-        mail.expunge()
-        mail.close()
-        mail.logout()
+                except Exception as e:
+                    print(f"❌ Fehler bei {email_data['sender']}: {e}")
+                    logging.error(f"Fehler beim Wiederherstellen: {e}")
 
     except Exception as e:
         print(f"❌ Fehler: {e}")

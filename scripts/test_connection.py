@@ -4,15 +4,16 @@ Test-Modus: Verbindungstest für Ollama, LLM und E-Mail-Accounts
 Prüft alle Komponenten ohne E-Mails zu verarbeiten
 """
 
+import imaplib
 import sys
 from pathlib import Path
 
+import requests
+
 # Füge src/ zum Python-Path hinzu
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-import requests
-import imaplib
 from config import EMAIL_ACCOUNTS, SPAM_MODEL
+from constants import HTTP_STATUS_OK
 
 
 def print_header(text):
@@ -37,7 +38,7 @@ def test_ollama_connection():
 
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == requests.codes.ok:
+        if response.status_code == HTTP_STATUS_OK:
             print_test("Ollama erreichbar", True, "http://localhost:11434")
             return True
         print_test(
@@ -65,7 +66,7 @@ def test_ollama_model():
 
     try:
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code != requests.codes.ok:
+        if response.status_code != HTTP_STATUS_OK:
             print_test("Modell-Liste abrufen", False, "Ollama antwortet nicht")
             return False
 
@@ -83,11 +84,11 @@ def test_ollama_model():
         if model_found:
             print_test(f"Modell '{SPAM_MODEL}' verfügbar", True)
             print(f"\n📋 Installierte Modelle ({len(models)}):")
-            MAX_DISPLAY_MODELS = 5
-            for model in models[:MAX_DISPLAY_MODELS]:  # Zeige max 5
+            max_display_models = 5
+            for model in models[:max_display_models]:  # Zeige max 5
                 print(f"   - {model['name']}")
-            if len(models) > MAX_DISPLAY_MODELS:
-                print(f"   ... und {len(models) - MAX_DISPLAY_MODELS} weitere")
+            if len(models) > max_display_models:
+                print(f"   ... und {len(models) - max_display_models} weitere")
             return True
         print_test(f"Modell '{SPAM_MODEL}' verfügbar", False, "Nicht gefunden")
         print("\n💡 Lösung:")

@@ -10,21 +10,26 @@ Autor: Erweitert für Spam-Guard
 Datum: 2025-11-20
 """
 
-import requests
+import json
 import logging
-import yaml
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Set, List, Tuple, Optional, Dict
-import json
+
+import requests
+import yaml
+
 from config import PROJECT_ROOT
+from constants import (
+    EXTERNAL_LIST_DOWNLOAD_TIMEOUT,
+    EXTERNAL_LIST_UPDATE_INTERVAL_HOURS,
+    MAX_LIST_ENTRY_LENGTH,
+)
 
 # ============================================
 # Konfiguration
 # ============================================
-
-# Update-Intervall für externe Listen (in Stunden)
-UPDATE_INTERVAL_HOURS = 24
 
 # Verzeichnisse
 LISTS_DIR = PROJECT_ROOT / "data" / "lists"  # User White-/Blacklists
@@ -33,8 +38,6 @@ CACHE_DIR = PROJECT_ROOT / "data" / "lists" / "external"  # Externe Listen Cache
 # Pfad zur Blacklist-Provider Konfiguration
 BLACKLIST_SOURCES_FILE = LISTS_DIR / "blacklist_sources.yaml"
 BLACKLIST_SOURCES_EXAMPLE = LISTS_DIR / "blacklist_sources.yaml.example"
-
-MAX_ENTRY_LENGTH = 255
 
 
 def _validate_source_config(source_name: str, config: Dict) -> bool:
@@ -237,6 +240,15 @@ LOCAL_BLACKLIST_PATH = "data/lists/blacklist.txt"
 # ============================================
 
 
+@dataclass
+class _ListData:
+    """Groups the three sets that make up one list (email, domain, IP)."""
+
+    emails: Set[str] = field(default_factory=set)
+    domains: Set[str] = field(default_factory=set)
+    ips: Set[str] = field(default_factory=set)
+
+
 class ListManager:
     """
     Verwaltet Spam-Blacklists und Whitelists.
@@ -252,7 +264,7 @@ class ListManager:
     def __init__(
         self,
         cache_dir: Optional[Path] = None,
-        update_interval_hours: int = UPDATE_INTERVAL_HOURS,
+        update_interval_hours: int = EXTERNAL_LIST_UPDATE_INTERVAL_HOURS,
     ):
         """
         Initialisiert den ListManager.
@@ -269,11 +281,8 @@ class ListManager:
         self.cache_dir.mkdir(parents=True, exist_ok=True)  # Für externe Listen Cache
 
         # Listen als Sets für schnelle Lookup-Performance
-        self.whitelist_emails: Set[str] = set()
-        self.whitelist_domains: Set[str] = set()
-        self.blacklist_emails: Set[str] = set()
-        self.blacklist_domains: Set[str] = set()
-        self.blacklist_ips: Set[str] = set()
+        self.whitelist = _ListData()
+        self.blacklist = _ListData()
 
         # Metadaten für Updates
         self.metadata_file = self.cache_dir / "metadata.json"
@@ -303,9 +312,9 @@ class ListManager:
 
         logging.info(
             f"Listen geladen: "
-            f"Whitelist ({len(self.whitelist_emails)} E-Mails, {len(self.whitelist_domains)} Domains), "
-            f"Blacklist ({len(self.blacklist_emails)} E-Mails, {len(self.blacklist_domains)} Domains, "
-            f"{len(self.blacklist_ips)} IPs)"
+            f"Whitelist ({len(self.whitelist.emails)} E-Mails, {len(self.whitelist.domains)} Domains), "
+            f"Blacklist ({len(self.blacklist.emails)} E-Mails, {len(self.blacklist.domains)} Domains, "
+            f"{len(self.blacklist.ips)} IPs)"
         )
 
     def _validate_and_add_entry(
@@ -317,7 +326,7 @@ class ListManager:
         target_domains: Set[str],
     ) -> bool:
         """Validiert einen Eintrag und fügt ihn der entsprechenden Liste hinzu."""
-        if not entry or len(entry) > MAX_ENTRY_LENGTH:
+        if not entry or len(entry) > MAX_LIST_ENTRY_LENGTH:
             print(
                 f"⚠️  {list_name} Zeile {line_num}: Ungültiger Eintrag (zu lang oder leer)"
             )
@@ -329,7 +338,7 @@ class ListManager:
         # Domain-Logik (startet mit @ oder enthält kein @)
         if entry.startswith("@") or "@" not in entry:
             domain = entry[1:].strip() if entry.startswith("@") else entry
-            
+
             if not domain or " " in domain:
                 print(
                     f"⚠️  {list_name} Zeile {line_num}: Domain darf keine Leerzeichen enthalten: {entry}"
@@ -338,10 +347,10 @@ class ListManager:
                     f"{list_name} Zeile {line_num}: Ungültige Domain: {entry}"
                 )
                 return False
-            
+
             target_domains.add(domain.lower())
             return True
-        
+
         # E-Mail-Logik
         if entry.count("@") != 1:
             print(
@@ -351,7 +360,7 @@ class ListManager:
                 f"{list_name} Zeile {line_num}: Ungültige E-Mail: {entry}"
             )
             return False
-            
+
         target_emails.add(entry.lower())
         return True
 
@@ -418,8 +427,8 @@ class ListManager:
         self._load_generic_list(
             whitelist_path,
             "Whitelist",
-            self.whitelist_emails,
-            self.whitelist_domains,
+            self.whitelist.emails,
+            self.whitelist.domains,
             default_content,
         )
 
@@ -433,8 +442,8 @@ class ListManager:
         self._load_generic_list(
             blacklist_path,
             "Blacklist",
-            self.blacklist_emails,
-            self.blacklist_domains,
+            self.blacklist.emails,
+            self.blacklist.domains,
             default_content,
         )
 
@@ -481,19 +490,19 @@ class ListManager:
                     f"      ⏳ {source_config['description']}: Lade von {source_config['url']}..."
                 )
                 logging.info(f"Lade externe Liste: {source_config['description']}")
-                response = requests.get(source_config["url"], timeout=30)
+                response = requests.get(source_config["url"], timeout=EXTERNAL_LIST_DOWNLOAD_TIMEOUT)
                 response.raise_for_status()
 
                 # Speichere im Cache
                 cache_file.write_text(response.text, encoding="utf-8")
 
                 # Parse und füge zu Blacklist hinzu
-                entries_count_before = len(self.blacklist_ips) + len(
-                    self.blacklist_domains
+                entries_count_before = len(self.blacklist.ips) + len(
+                    self.blacklist.domains
                 )
                 self._load_from_cache(cache_file, source_config["type"])
-                entries_count_after = len(self.blacklist_ips) + len(
-                    self.blacklist_domains
+                entries_count_after = len(self.blacklist.ips) + len(
+                    self.blacklist.domains
                 )
                 new_entries = entries_count_after - entries_count_before
 
@@ -540,20 +549,20 @@ class ListManager:
         entries = self._parse_list_file(cache_file)
 
         if list_type == "ip":
-            self.blacklist_ips.update(entries)
+            self.blacklist.ips.update(entries)
         elif list_type == "domain":
-            self.blacklist_domains.update(entry.lower() for entry in entries)
+            self.blacklist.domains.update(entry.lower() for entry in entries)
         elif list_type == "email":
-            self.blacklist_emails.update(entry.lower() for entry in entries)
+            self.blacklist.emails.update(entry.lower() for entry in entries)
         elif list_type == "ip_cidr":
             # Für CIDR-Blöcke extrahieren wir IPs (vereinfacht)
             for entry in entries:
                 # Extrahiere IP aus CIDR-Notation (z.B. "192.168.1.0/24")
                 if "/" in entry:
                     ip = entry.split("/")[0]
-                    self.blacklist_ips.add(ip)
+                    self.blacklist.ips.add(ip)
                 else:
-                    self.blacklist_ips.add(entry)
+                    self.blacklist.ips.add(entry)
 
     def _parse_list_file(self, file_path: Path) -> List[str]:
         """
@@ -610,7 +619,7 @@ class ListManager:
         domain = email_lower.split("@")[1] if "@" in email_lower else ""
 
         # 1. Prüfe Whitelist (höchste Priorität)
-        if email_lower in self.whitelist_emails:
+        if email_lower in self.whitelist.emails:
             logging.info(f"✅ E-Mail auf Whitelist: {email_address}")
             return False, f"Whitelist: {email_address}"
 
@@ -622,12 +631,12 @@ class ListManager:
             # Mindestens Domain + TLD müssen übrig bleiben (z.B. google.com)
             for i in range(len(parts) - 1):
                 parent_domain = ".".join(parts[i:])
-                if parent_domain in self.whitelist_domains:
+                if parent_domain in self.whitelist.domains:
                     logging.info(f"✅ Domain auf Whitelist: {parent_domain} (Match für {domain})")
                     return False, f"Whitelist: @{parent_domain}"
 
         # 2. Prüfe Blacklist
-        if email_lower in self.blacklist_emails:
+        if email_lower in self.blacklist.emails:
             logging.info(f"🚫 E-Mail auf Blacklist: {email_address}")
             return True, f"Blacklist: {email_address}"
 
@@ -636,7 +645,7 @@ class ListManager:
             parts = domain.split(".")
             for i in range(len(parts) - 1):
                 parent_domain = ".".join(parts[i:])
-                if parent_domain in self.blacklist_domains:
+                if parent_domain in self.blacklist.domains:
                     logging.info(f"🚫 Domain auf Blacklist: {parent_domain} (Match für {domain})")
                     return True, f"Blacklist: @{parent_domain}"
 
@@ -658,7 +667,7 @@ class ListManager:
 
         ip_clean = ip_address.strip()
 
-        if ip_clean in self.blacklist_ips:
+        if ip_clean in self.blacklist.ips:
             logging.info(f"🚫 IP auf Blacklist: {ip_address}")
             return True, f"Blacklist IP: {ip_address}"
 
@@ -706,7 +715,8 @@ class ListManager:
                 self.metadata[source_name]["last_update"]
             )
             return datetime.now() - last_update < self.update_interval
-        except Exception:
+        except (KeyError, ValueError, TypeError) as e:
+            logging.debug(f"Cache validation failed for {source_name}: {e}")
             return False
 
     def _get_cache_age(self, source_name: str) -> str:
@@ -738,7 +748,8 @@ class ListManager:
                 return f"{hours}h {minutes}m"
 
             return f"{minutes}m"
-        except Exception:
+        except (KeyError, ValueError, TypeError) as e:
+            logging.debug(f"Cache age calculation failed for {source_name}: {e}")
             return "unbekannt"
 
     # ============================================
@@ -754,17 +765,17 @@ class ListManager:
         """
         return {
             "whitelist": {
-                "emails": len(self.whitelist_emails),
-                "domains": len(self.whitelist_domains),
-                "total": len(self.whitelist_emails) + len(self.whitelist_domains),
+                "emails": len(self.whitelist.emails),
+                "domains": len(self.whitelist.domains),
+                "total": len(self.whitelist.emails) + len(self.whitelist.domains),
             },
             "blacklist": {
-                "emails": len(self.blacklist_emails),
-                "domains": len(self.blacklist_domains),
-                "ips": len(self.blacklist_ips),
-                "total": len(self.blacklist_emails)
-                + len(self.blacklist_domains)
-                + len(self.blacklist_ips),
+                "emails": len(self.blacklist.emails),
+                "domains": len(self.blacklist.domains),
+                "ips": len(self.blacklist.ips),
+                "total": len(self.blacklist.emails)
+                + len(self.blacklist.domains)
+                + len(self.blacklist.ips),
             },
             "cache": {
                 "directory": str(self.cache_dir),
@@ -820,7 +831,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     print("🔧 Initialisiere ListManager...")
-    manager = get_list_manager()
+    manager = get_list_manager()  # pylint: disable=invalid-name
 
     print("\n📊 Statistiken:")
     stats = manager.get_stats()

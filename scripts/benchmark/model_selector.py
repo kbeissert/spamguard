@@ -1,6 +1,7 @@
-import requests
-import questionary
 import sys
+
+import questionary
+import requests
 
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
 

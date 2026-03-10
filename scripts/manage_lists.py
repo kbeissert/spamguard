@@ -20,6 +20,12 @@ Datum: 2025-11-20
 import sys
 import argparse
 from pathlib import Path
+from typing import List, Set
+
+# Füge src/ zum Python-Path hinzu
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from constants import MAX_LIST_ENTRY_LENGTH  # noqa: E402
 
 # Pfade zu Listen-Dateien
 LISTS_DIR = Path(__file__).parent.parent / "data" / "lists"
@@ -38,23 +44,17 @@ def ensure_file_exists(file_path: Path) -> None:
         print(f"✅ Datei erstellt: {file_path}")
 
 
-def read_list(file_path: Path) -> list:
-    """Liest Liste und gibt Einträge zurück (ohne Kommentare)."""
+def read_list(file_path: Path) -> List[str]:
+    """Liest Liste und gibt alle Zeilen zurück (inkl. Kommentare für Datei-Erhalt)."""
     ensure_file_exists(file_path)
 
     lines = file_path.read_text(encoding="utf-8").splitlines()
-    entries = []
-
-    for line in lines:
-        # Behalte Kommentare und Leerzeilen für die Datei
-        entries.append(line)
-
-    return entries
+    return lines
 
 
-def get_entries_only(lines: list) -> set:
+def get_entries_only(lines: List[str]) -> Set[str]:
     """Extrahiert nur die Einträge (ohne Kommentare und Leerzeilen)."""
-    entries = set()
+    entries: Set[str] = set()
     for line in lines:
         cleaned = line.split("#")[0].strip()
         if cleaned:
@@ -73,9 +73,8 @@ def add_entry(list_type: str, entry: str) -> None:
         print("❌ Fehler: Leerer Eintrag")
         sys.exit(1)
 
-    MAX_ENTRY_LENGTH = 255
-    if len(entry) > MAX_ENTRY_LENGTH:
-        print(f"❌ Fehler: Eintrag zu lang (max {MAX_ENTRY_LENGTH} Zeichen)")
+    if len(entry) > MAX_LIST_ENTRY_LENGTH:
+        print(f"❌ Fehler: Eintrag zu lang (max {MAX_LIST_ENTRY_LENGTH} Zeichen)")
         sys.exit(1)
 
     # Prüfe ob bereits vorhanden

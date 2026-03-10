@@ -6,7 +6,7 @@ Launcher for Spam Benchmark with Interactive Model Selection.
 import subprocess
 import sys
 import os
-from model_selector import select_model
+from model_selector import select_model  # pylint: disable=import-error
 
 
 def main():

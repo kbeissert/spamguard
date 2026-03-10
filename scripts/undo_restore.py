@@ -104,6 +104,32 @@ def connect_imap(account: Dict[str, str]) -> imaplib.IMAP4_SSL:
     mail.login(account["user"], account["password"])
     return mail
 
+def _try_move_email(
+    mail: imaplib.IMAP4_SSL,
+    email_id: bytes,
+    account: Dict[str, str],
+) -> int:
+    """Fetch one email and move it back to spam if it matches. Returns 1 if moved, 0 otherwise."""
+    status, msg_data = mail.fetch(email_id, "(RFC822.HEADER)")
+    if status != "OK":
+        return 0
+
+    msg = email.message_from_bytes(msg_data[0][1])
+    sender = email.utils.parseaddr(msg.get("From", ""))[1]
+
+    if sender not in TARGET_SENDERS or sender in WHITELISTED:
+        return 0
+
+    print(f"   🔙 Verschiebe zurück in Spam: {sender}")
+    res, _ = mail.copy(email_id, account["spam_folder"])
+    if res == "OK":
+        mail.store(email_id, "+FLAGS", "\\Deleted")
+        return 1
+
+    print(f"   ❌ Fehler beim Verschieben von {sender}")
+    return 0
+
+
 def undo_restore():
     print("🛡️  Starte Undo-Restore...")
     print(f"ℹ️  Suche nach {len(TARGET_SENDERS)} Absendern im Posteingang...")
@@ -113,48 +139,29 @@ def undo_restore():
         try:
             mail = connect_imap(account)
             mail.select("INBOX")
-            
+
             # Suche alle Mails (wir filtern manuell, da SEARCH OR ... zu lang werden kann)
             status, data = mail.search(None, "ALL")
             if status != "OK" or not data[0]:
                 print("   Posteingang leer oder Fehler.")
                 continue
-                
+
             email_ids = data[0].split()
             print(f"   Prüfe {len(email_ids)} E-Mails im Posteingang...")
-            
+
             moved_count = 0
-            
+
             for email_id in email_ids:
                 try:
-                    status, msg_data = mail.fetch(email_id, "(RFC822.HEADER)")
-                    if status != "OK":
-                        continue
-                    
-                    msg = email.message_from_bytes(msg_data[0][1])
-                    sender = email.utils.parseaddr(msg.get("From", ""))[1]
-                    
-                    # Check if sender is in our target list
-                    if sender in TARGET_SENDERS and sender not in WHITELISTED:
-                        print(f"   🔙 Verschiebe zurück in Spam: {sender}")
-                        
-                        # Kopiere in Spam
-                        res, _ = mail.copy(email_id, account["spam_folder"])
-                        if res == "OK":
-                            # Lösche aus Inbox
-                            mail.store(email_id, "+FLAGS", "\\Deleted")
-                            moved_count += 1
-                        else:
-                            print(f"   ❌ Fehler beim Verschieben von {sender}")
-                            
+                    moved_count += _try_move_email(mail, email_id, account)
                 except Exception as e:
                     print(f"   Fehler bei Mail-ID {email_id}: {e}")
-                    
+
             mail.expunge()
             mail.close()
             mail.logout()
             print(f"   ✅ {moved_count} E-Mails zurück in Spam verschoben.")
-            
+
         except Exception as e:
             print(f"   ❌ Fehler bei Account {account['name']}: {e}")
 
