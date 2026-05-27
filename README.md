@@ -1,531 +1,178 @@
-# Spam Guard
+# SpamGuard
 
-🛡️ Intelligente E-Mail-Spam-Filterung mit optionalem lokalem LLM – 100% privat, keine Cloud.
+> Ein lokaler, KI-gestützter Spam-Filter für E-Mail-Konten — 100% auf deiner Maschine, kein Cloud-Abonnement, kein Serverraum.
 
-> IMAP-basierter Spam-Filter mit Bayesian Pre-Filter + optionalem LLM via Ollama für maximale Genauigkeit.
+---
 
-**Version 0.4.0** – Auto-Training, Newsletter-IMAP-Ordner, Logging-Fix
+## Warum ich Spam-Guard gebaut habe
+
+Die Idee zu diesem Projekt entstand, als ich keine Lust mehr hatte, mein E‑Mail‑Programm zu öffnen: Über 90 % der ungelesenen Mails waren Spam. Der Versuch, das Problem durch Abmeldungen und konsequentes Markieren zu lösen, glich dem Kampf gegen die Hydra — der Aufwand verteilte sich nur anders. Mir fiel auf, dass ich mehr Zeit mit Sortieren als mit Lesen verbringe.
+
+Der Spamschutz des Providers brachte kaum Entlastung. Externe Dienste und Filter versprachen viel, verschoben den Aufwand aber nur und erzeugten zusätzliche Arbeit. Bei meiner Recherche nach Open‑Source‑Lösungen für den Heimeinsatz fand ich zwar einige beeindruckende Projekte, doch fast jedes erforderte erheblichen Setup‑ und Wartungsaufwand — von der oft nötigen Infrastruktur ganz zu schweigen.
+
+Ich suchte etwas Simples: ein Werkzeug, das auf meinem Rechner läuft und meine Mails auf Knopfdruck sortiert. Im KI‑Zeitalter hatte ich große Hoffnungen, fand aber nichts Passendes. Gleichzeitig zeigte sich, dass Spambekämpfung auch ohne KI sehr effektiv sein kann. Also entwickelte ich ein kleines Tool, das mein Postfach aufräumt, bevor ich es öffne. Daraus ist Spam‑Guard entstanden, das auf drei Ebenen arbeitet:
+
+1. Whitelisting/Blacklisting mit etablierten Listen aus dem Internet
+2. Bayesian‑Filter, der selbst lernt und den Großteil der Spam‑Mails in Bruchteilen einer Sekunde erkennt
+3. Optional: LLM‑Unterstützung (lokale Ollama‑Modelle) für schwierige Grenzfälle, die der Bayesian‑Filter nicht eindeutig klassifizieren kann
+
+Die dritte Ebene ist optional — nur sinnvoll, wenn ausreichend Rechenleistung für eine lokale Ollama‑Instanz vorhanden ist. Weil ich KI‑Benchmarks mag, gibt es außerdem ein Benchmark‑Skript, das die beste lokale KI für diesen Job ermitteln kann.
+
+Spam‑Guard ist das Ergebnis: ein mehrstufiger Filter, der lokal läuft, Ollama‑Modelle nutzen kann und sich per `make start` starten lässt — keine Infrastruktur, kein Abo, nur ein digitaler Wachmann fürs E‑Mail‑Chaos.
+
+---
 
 ## Features
 
-- ✅ **Multi-Account Support**: Mehrere E-Mail-Konten gleichzeitig verwalten
-- ✅ **Lokale Spam-Erkennung**: Keine Cloud, 100% lokal via Ollama
-- 🆕 **LLM-freier Modus**: Funktioniert auch OHNE Ollama (nur Bayesian, ~88-90% Genauigkeit)
-- ✅ **7-Stufen-Filter**: Whitelist → Blacklist → TLD-Check → SPF/DKIM → DNSBL → Bayesian → LLM
-- ✅ **Bayesian Pre-Filter**: 70-80% der Mails werden in 10ms klassifiziert (ohne LLM)
-- 🆕 **Newsletter-Erkennung**: Optionaler 3-Klassen-Modus (HAM/SPAM/NEWSLETTER) mit flexiblem Routing
-- 🆕 **Auto-Training**: Erkannte Spam-Mails werden automatisch als Trainingssamples gespeichert — das Modell lernt kontinuierlich
-- ✅ **Externe Blacklists**: Automatisches Laden von Spamhaus, Blocklist.de etc.
-- ✅ **IMAP-Support**: All-Inkl, Gmail, GMX, Outlook, HostEurope, Berlin.de, etc.
-- ✅ **LLM-basiert**: Unterstützt `gemma3:12b`, `gemma4:e4b`, `ministral3:14b` mit 4-Kategorien-Klassifikation
-- ✅ **YAML-Konfiguration**: Übersichtliche Account- und LLM-Verwaltung
-- ✅ **Flexible Filter**: Nach Anzahl oder Zeitraum (letzte X Tage)
-- ✅ **Benchmark-Tool**: Teste und vergleiche verschiedene LLM-Modelle (inkl. Reasoning-Support)
-- ✅ **Detailliertes Logging**: Vollständige Nachverfolgbarkeit
+- **Sieben Filterstufen** — Whitelist → Blacklist → TLD → SPF/DKIM → DNSBL → Bayesian → LLM
+- **LLM-freier Modus** — funktioniert auch ohne Ollama (nur Bayesian, ~88–90% Genauigkeit)
+- **Bayesian Pre-Filter** — 70–80% aller Mails werden in ~10 ms klassifiziert, ohne LLM
+- **Newsletter-Erkennung** — optionaler 3-Klassen-Modus (HAM / SPAM / NEWSLETTER) mit flexiblem Routing
+- **Auto-Training** — erkannte Spam-Mails werden automatisch als Trainingssamples gespeichert
+- **Externe Blacklists** — Spamhaus DROP/EDROP, Blocklist.de, Feodo Tracker, Phishing Army und weitere
+- **Multi-Account** — beliebig viele IMAP-Accounts gleichzeitig
+- **Benchmark-Tool** — vergleiche LLM-Modelle auf deinen eigenen Mails (mit Batch-Modus)
+- **YAML-Konfiguration** — übersichtlich, keine Python-Kenntnisse nötig
+- **100% lokal** — keine Cloud, keine fremden Server, keine Telemetrie
+
+---
+
+## Wie es funktioniert
+
+Jede eingehende Mail durchläuft die Pipeline von oben nach unten. Sobald eine Stufe eine eindeutige Entscheidung trifft, ist die Mail fertig — die nachfolgenden Stufen werden nicht mehr ausgeführt.
+
+```
+┌─────────────────────────────────────────────────┐
+│  1. WHITELIST     → sofort HAM (vertrauenswürdig)│
+│  2. BLACKLIST     → sofort SPAM (bekannte Sender)│
+│  3. TLD-CHECK     → verdächtige Endungen (.xyz…) │
+│  4. SPF/DKIM      → Auth-Fehler als Hinweis/SPAM │
+│  5. DNSBL-LOOKUP  → IP in öffentl. Blacklist?    │
+│  5b.IP-BLACKLIST  → IP in lokaler CIDR-Liste?    │
+│  6. BAYESIAN      → TF-IDF + Naive Bayes         │
+│     < 0.3  → HAM  │  > 0.5  → SPAM              │
+│     0.3–0.5 → unsicher → weiter zu Stufe 7       │
+│  7. LLM (Ollama)  → semantische Analyse der      │
+│                     Grenzfälle (SPAM/PHISHING/   │
+│                     COMMERCIAL/HAM)              │
+└─────────────────────────────────────────────────┘
+```
+
+Das LLM sieht im Produktivbetrieb etwa 8% aller Mails. Den Rest erledigen Bayesian-Filter und deterministische Regeln — schneller, ohne GPU, und oft zuverlässiger.
+
+---
 
 ## Quick Start
 
+### 1. Repository klonen
+
 ```bash
-# Repository klonen oder ZIP herunterladen
-git clone <your-repo-url> spam-guard
+git clone https://github.com/kbeissert/spam-guard.git
 cd spam-guard
 ```
 
-### 1. Dependencies installieren
+### 2. Dependencies installieren
 
-**Mit Makefile:**
 ```bash
 make install
 ```
 
-**Oder manuell:**
-```bash
-pip install -e .
-```
+### 3. Konfiguration anlegen
 
-### 2. Konfiguration erstellen
 ```bash
-# .env Datei anlegen
 cp .env.example .env
-
-# Config-Dateien anlegen
 cp config/accounts.yaml.example config/accounts.yaml
 cp config/settings.yaml.example config/settings.yaml
 cp config/blacklists.yaml.example config/blacklists.yaml
-
-# Whitelist/Blacklist anlegen
 cp data/lists/whitelist.txt.example data/lists/whitelist.txt
 cp data/lists/blacklist.txt.example data/lists/blacklist.txt
 ```
 
-### 3. Accounts konfigurieren
-Bearbeite `accounts.yaml`:
+Dann `config/accounts.yaml` mit deinen IMAP-Zugangsdaten befüllen:
+
 ```yaml
 accounts:
-  - name: "Mein GMX Account"
-    user: "max@gmx.de"
+  - name: "Mein GMX"
+    user: "ich@gmx.de"
     password: "mein-passwort"
     server: "imap.gmx.net"
     port: 993
     spam_folder: "Spamverdacht"
-    enabled: true  # ← auf true setzen!
-```
-
-### 4. LLM-Modus aktivieren (Optional)
-
-**Standardmäßig läuft der Filter im LLM-freien Modus** (nur Bayesian + deterministische Checks).
-
-**Option A: LLM-freier Modus** (empfohlen für Einsteiger)
-```yaml
-# config/settings.yaml
-llm:
-  enabled: false  # Standard: kein LLM benötigt
-```
-
-✅ **Vorteile:**
-- Keine Ollama-Installation nötig
-- Funktioniert auf schwacher Hardware
-- Schnell: ~10ms pro Mail
-- ~88-90% Genauigkeit mit Bayesian Filter
-
-⚠️ **Nachteile:**
-- Keine semantische Spam-Analyse
-- Weniger genau bei neuen Spam-Mustern
-
-**Option B: LLM-Modus** (für maximale Genauigkeit)
-```yaml
-# config/settings.yaml
-llm:
-  enabled: true
-```
-
-Dann Ollama installieren:
-
-```bash
-# Ollama starten
-ollama serve
-
-# Modell installieren (Empfehlung: gemma3:12b für 16GB+ RAM)
-ollama pull gemma3:12b
-
-# Alternativ: Kompakteres Modell
-ollama pull gemma4:e4b
-
-# Alternativ: Für starke Systeme
-ollama pull ministral3:14b
-```
-
-💡 **Modellauswahl**: Siehe [Modellübersicht in SETUP.md](docs/SETUP.md#modellauswahl) für eine vollständige Übersicht aller verfügbaren Modelle mit Empfehlungen basierend auf deiner Hardware.
-
-### 5. Verbindung testen & Filter starten
-
-**Mit Makefile (empfohlen):**
-```bash
-make start              # Spam-Filter starten
-make load-blacklists    # Externe Blacklists herunterladen
-make spam <adresse>     # Als Spam markieren (Blacklist)
-make unspam <adresse>   # Kein Spam (Whitelist + Wiederherstellen → Posteingang)
-make unspam-newsletter <adresse>  # Newsletter aus Spam → Newsletter-Ordner
-make show-lists         # Alle Listen anzeigen
-make benchmark          # Benchmark starten
-make help               # Alle verfügbaren Befehle
-```
-
-**Oder manuell:**
-```bash
-# Verbindungstest
-python scripts/test_connection.py
-
-# Spam-Filter starten
-python src/spam_filter.py
-
-# E-Mails wiederherstellen
-python scripts/unspam.py
-
-# Ordnerstruktur prüfen
-python scripts/list_folders.py
-```
-
-## Spam-Wiederherstellung
-
-Manchmal werden wichtige E-Mails fälschlich als Spam markiert. Das **Unspam-Tool** hilft dabei:
-
-### Workflow
-
-1. **Nach Spam-Filter-Lauf**: Prüfe die Spam-Absender-Übersicht
-2. **Whitelist aktualisieren & Wiederherstellen**: 
-   ```bash
-   # Fügt zur Whitelist hinzu UND stellt E-Mails wieder her
-   make unspam wichtig@firma.de
-   
-   # Auch für ganze Domains
-   make unspam firma.de
-   ```
-
-### Listen verwalten
-
-```bash
-# Whitelist
-make show-lists                        # Anzeigen
-make whitelist <adresse>               # Hinzufügen (ohne Restore)
-
-# Blacklist  
-make show-lists                        # Anzeigen
-make spam <adresse>                    # Hinzufügen
-
-# Entfernen (manuell oder per Script)
-python scripts/manage_lists.py whitelist remove email@test.de
-python scripts/manage_lists.py blacklist remove spam@bad.com
-```
-
-Das Tool durchsucht alle Spam-Ordner, findet E-Mails von Whitelist-Absendern und verschiebt diese zurück in den Posteingang.
-
-**Vorteile:**
-- ✅ Kein manuelles Durchsuchen der Spam-Ordner nötig
-- ✅ Funktioniert für alle konfigurierten Accounts
-- ✅ Sicher: Nur Whitelist-Absender werden verschoben
-- ✅ Dry-Run-Modus zum Testen
-
-## Benchmark
-
-Teste, welches LLM-Modell am besten für deine E-Mails geeignet ist. Das Benchmark-Tool misst Genauigkeit, Geschwindigkeit und Effizienz.
-
-```bash
-# Interaktiver Benchmark (Modell auswählen)
-make benchmark
-
-# Schneller Test (nur 5 E-Mails)
-make benchmark-quick
-```
-
-👉 **[Ausführliche Benchmark-Dokumentation](docs/BENCHMARK.md)**
-
-## 🤖 Bayesian Filter Training
-
-SpamGuard nutzt einen **Bayesian Filter** als Vor-Filter, um 70-80% der Mails schnell zu klassifizieren. Das LLM wird nur für schwierige Grenzfälle verwendet. Dies reduziert die Verarbeitungszeit erheblich.
-
-### TL;DR (Schnell-Übersicht)
-
-**Was:** Intelligenter Pre-Filter der 70-80% der Mails in 10ms klassifiziert (ohne LLM)  
-**Wie:** Trainiere mit 100+ Spam + 100+ HAM .eml Dateien via `make train`  
-**Ergebnis:** 2-3x schneller, 88-90% Genauigkeit, LLM nur für schwierige Fälle
-
-**⚠️ WICHTIG - Newsletter vs. Spam:**
-- ✅ Newsletter gehören zu **HAM** (auch wenn nervig!)
-- ❌ NICHT als SPAM trainieren
-- **Warum:** Sonst lernt der Filter "zalando.de = SPAM" und blockiert ALLE Mails von Zalando (auch Bestellbestätigungen)
-- **Lösung:** Newsletter abmelden oder Inbox-Regel erstellen
-
-**🆕 Newsletter-Handling (3-Klassen-Modus):**
-
-Du kannst jetzt Newsletter als **separate Kategorie** trainieren und flexibel routen:
-
-```bash
-# 1. Newsletter sammeln (Zalando, LinkedIn, GitHub, etc.)
-mkdir -p data/training/newsletter
-# Kopiere .eml Dateien von Newslettern hierher
-
-# 2. Training (erkennt automatisch 3-Klassen-Modus)
-make train
-
-# 3. Konfiguriere Routing in config/settings.yaml:
-newsletter:
-  routing: "folder"      # "ham", "spam", oder "folder"
-  folder: "Newsletter"   # Ziel-Ordner
-```
-
-**Routing-Optionen:**
-- `"ham"`: Newsletter bleiben im Posteingang (Standard)
-- `"folder"`: Newsletter → eigener Ordner (empfohlen für Clean Inbox)
-- `"spam"`: Newsletter → Spam-Ordner (nur wenn wirklich unerwünscht)
-
-👉 **[Ausführliche Newsletter-Dokumentation](docs/CONFIGURATION.md#newsletter-handling-3-klassen-modus)**
-
-**Optimale Trainingsmenge:**
-
-**2-Klassen-Modus (HAM/SPAM):**
-
-| Menge | Genauigkeit | Empfehlung |
-|-------|-------------|------------|
-| 10 + 10 | < 85% | Nur für Tests |
-| 50 + 50 | 85-88% | Minimum für Produktion |
-| **100 + 100** | **88-90%** | **Empfohlen** ⭐ |
-| 200 + 200 | 90-95% | Optimal |
-| 500 + 500 | 95%+ | Diminishing Returns |
-
-**3-Klassen-Modus (HAM/SPAM/NEWSLETTER):**
-- Empfohlen: 100 HAM + 100 SPAM + 50-100 NEWSLETTER
-- Newsletter-Erkennung funktioniert ab ~30 Samples, optimal ab 50+
-
-### Wie es funktioniert
-
-Die Filter-Pipeline besteht aus 7 Stufen:
-```
-1. Whitelist        → hard PASS (~30%)
-2. Blacklist        → hard FAIL (~10%)
-3. TLD-Check        → heuristic (~15%)
-4. SPF/DKIM fail    → hard FAIL (~5%)
-5. DNSBL Lookup     → hard FAIL (~2%)
-6. Bayesian Filter  → 70% aller Mails (~30% reach here)
-   - Score < 0.3    → HAM (deliver)
-   - Score > 0.5    → SPAM (move)
-   - Score 0.3-0.5  → UNSURE (→ Stage 7)
-7. LLM (Ollama)     → final judge (~8%)
-```
-
-### Initiales Training
-
-**Option A: Schnellstart mit Starter-Samples** (empfohlen für Tests)
-```bash
-make train-with-starter    # Importiert Beispiel-Mails + trainiert lokal
-make start
-```
-
-**Option B: Mit eigenen E-Mails trainieren** (empfohlen für Produktion)
-
-1. **Spam-Mails sammeln** (mindestens 100):
-   ```bash
-   # Exportiere aus deinem Spam-Ordner (Account 0)
-   make export-spam
-   
-   # Oder manuell: Verschiebe .eml Dateien nach data/training/spam/
-   ```
-
-2. **Ham-Mails sammeln** (mindestens 100):
-   ```bash
-   # Exportiert aus Sent-Ordner (60%) + INBOX/Whitelist (40%)
-   make export-ham
-   
-   # Oder manuell: Verschiebe .eml Dateien nach data/training/ham/
-   ```
-
-3. **Training starten:**
-   ```bash
-   make train
-   # Bereinigt erst Duplikate, dann Training
-   # Output: Training mit X Spam + Y Ham Mails... ✅ abgeschlossen!
-   ```
-
-4. **Filter nutzen:**
-   ```bash
-   make start
-   # Filter läuft jetzt mit trainiertem Bayesian-Modell
-   ```
-
-### Nachtrainieren & Verfeinern
-
-Wenn der Filter False Positives/Negatives produziert:
-
-```bash
-# 1. Verschiebe falsch klassifizierte Mails nach data/training/{spam,ham}/
-# 2. Trainiere nach:
-make train
-
-# Das Modell lernt die neuen Patterns, alte Daten bleiben erhalten
-```
-
-**⚠️ Wichtig:** Die `.eml` Dateien **NICHT löschen** nach dem Training. Sie werden bei jedem `make train` benötigt (Retrain-Strategie auf allen Daten, dauert nur ~2s für 1000 Mails).
-
-### Training-Statistiken
-
-```bash
-make train-stats
-# Output:
-# 📊 Bayesian Filter Statistics
-# ✅ Modell bereit: /path/to/bayesian_model.pkl
-#    Features: 5000
-#    Modell-Größe: 2.4 KB
-#
-# 📅 Letztes Training: 2026-05-26T18:43:12
-#    Spam-Mails: 480
-#    HAM-Mails: 140
-#    CV Folds: 5
-```
-
-### Konfiguration (`config/settings.yaml`)
-
-```yaml
-bayesian:
-  enabled: true           # Bayesian Filter aktivieren
-  llm_fallback: false     # LLM nur bei Unsicherheit (0.3-0.5)
-  
-  thresholds:
-    hard_ham: 0.3         # Score < 0.3 → Auto-deliver (kein LLM)
-    hard_spam: 0.5        # Score > 0.5 → Auto-spam (kein LLM)
-    # Zwischen 0.3-0.5:
-    #   - llm_fallback: false → default to HAM (safe choice)
-    #   - llm_fallback: true  → escalate to LLM
-  
-  training:
-    min_samples_warning: 100    # Warning bei < 100 Mails
-    feature_count: 5000         # TF-IDF max features
-```
-
-### Performance-Vorteil
-
-- **Ohne Bayesian**: ~25 Mails/Minute (LLM für jede Mail)
-- **Mit Bayesian**: ~50-60 Mails/Minute (70% durch Bayesian, 8% LLM)
-- **Genauigkeit**: 88-90% (Bayesian) + 95%+ (Hybrid mit LLM)
-
-👉 **Tipp**: Starte mit `llm_fallback: false` für maximale Geschwindigkeit. Aktiviere LLM-Fallback nur wenn du mehr Genauigkeit brauchst.
-
-## Konfiguration
-
-### Filter-Einstellungen + LLM + Bayesian (`config/settings.yaml`)
-```yaml
-filter:
-  mode: "days"      # oder "count"
-  days_back: 7      # Tage zurück (bei mode: "days")
-  limit: 50         # Anzahl E-Mails (bei mode: "count")
-
-llm:
-  enabled: false    # true = Ollama erforderlich
-  model: "gemma3:12b"
-  url: "http://localhost:11434"
-
-bayesian:
-  enabled: true
-  thresholds:
-    hard_ham: 0.3
-    hard_spam: 0.5
-  newsletter:
-    routing: "folder"
-    folder: "Newsletter"
-```
-
-**Modi:**
-- `count`: Analysiert die letzten X E-Mails pro Account
-- `days`: Analysiert E-Mails der letzten X Tage
-
-### Blacklist/Whitelist System (`.env`)
-```bash
-USE_LISTS=true                # Aktiviert Listen-basierte Filterung
-LIST_UPDATE_INTERVAL=24       # Update-Intervall für externe Listen (Stunden)
-WHITELIST_FILE=data/lists/whitelist.txt
-BLACKLIST_FILE=data/lists/blacklist.txt
-```
-
-### E-Mail-Accounts (`config/accounts.yaml`)
-```yaml
-accounts:
-  - name: "Account Name"
-    user: "email@domain.de"
-    password: "passwort"
-    server: "imap.server.de"
-    port: 993
-    spam_folder: "Spam"
     enabled: true
 ```
 
-**Wichtig**: Nur Accounts mit `enabled: true` werden verarbeitet!
+### 4. Bayesian-Filter trainieren
 
-### Whitelist/Blacklist (`data/lists/`)
+Für einen guten Start: mindestens 100 Spam- und 100 HAM-Mails exportieren.
 
-**Whitelist** (`whitelist.txt`) - Vertrauenswürdige Absender:
 ```bash
-# E-Mail-Adressen (exakt)
-admin@company.com
-
-# Ganze Domains (alle E-Mails von dieser Domain)
-# WICHTIG: Subdomains (z.B. marketing.trusted-domain.com) werden NICHT automatisch erkannt!
-# Dies ist ein Sicherheitsfeature, um Spam von gekaperten Subdomains zu verhindern.
-# Subdomains müssen separat hinzugefügt werden.
-trusted-domain.com
-@trusted-domain.com  # Alternative Schreibweise (wird automatisch erkannt)
+make export-spam    # Spam-Mails aus IMAP exportieren
+make export-ham     # HAM-Mails aus IMAP exportieren
+make train          # Bayesian-Modell trainieren
 ```
 
-**Blacklist** (`blacklist.txt`) - Bekannte Spam-Absender:
+### 5. Filter starten
+
 ```bash
-# Spam-Adressen
-spam@badsite.com
-
-# Spam-Domains
-known-spammer.xyz
+make start
 ```
 
-**Externe Blacklists** werden über `config/blacklists.yaml` konfiguriert und mit `make load-blacklists` heruntergeladen. Standard aktiv:
-- Spamhaus DROP + EDROP (IP-CIDR)
-- Blocklist.de, Feodo Tracker (einzelne IPs)
-- Phishing Army, CERT Poland, Firebog, Abuse.ch URLhaus (Domains)
+**Ohne LLM** (Standard, empfohlen für den Anfang): funktioniert sofort, keine Ollama-Installation nötig.
 
-💡 **Alle aktivierten IP-CIDR-Blöcke werden korrekt als Netzwerke ausgewertet** (keine primitiven String-Matches mehr).
+**Mit LLM** (optional, für maximale Genauigkeit): Ollama installieren, Modell laden, `llm.enabled: true` in `config/settings.yaml`.
 
-## Spam-Filter Logik
-
-Das System verwendet einen **7-Stufen-Ansatz**. Die Whitelist steht bewusst an erster Stelle, damit vertrauenswürdige Absender niemals durch nachfolgende Stufen — auch nicht durch DNSBL oder Bayesian — fälschlich als Spam blockiert werden können:
-
-```
-1. WHITELIST      → E-Mail IMMER als HAM (kein Spam)
-   ↓ kein Treffer
-2. BLACKLIST      → E-Mail IMMER als SPAM
-   ↓ kein Treffer
-3. TLD-CHECK      → Verdächtige Sender-TLD (.xyz, .top, .click ...) → SPAM
-   ↓ kein Treffer
-4. SPF/DKIM-AUTH  → Doppelter Auth-Fail → SPAM; einzelner Fail → Hinweis für LLM
-   ↓ kein hard fail
-5. DNSBL-LOOKUP   → Sender-IP in DNS-Blackliste → SPAM
-   ↓ kein Treffer
-5b. IP-BLACKLIST  → Sender-IP in lokalem CIDR-Block (config/blacklists.yaml) → SPAM
-   ↓ kein Treffer
-6. BAYESIAN       → TF-IDF + Naive Bayes: SPAM/HAM/NEWSLETTER
-   ↓ unsicher (0.3-0.5)
-7. LLM-ANALYSE    → Intelligente Bewertung: SPAM / PHISHING / COMMERCIAL / HAM
+```bash
+ollama pull gemma4:e4b      # Empfehlung: schnell + effizient
+# oder
+ollama pull ministral3:14b  # Empfehlung: höchste Präzision
 ```
 
-**Priorität**: Whitelist > Blacklist > TLD > SPF/DKIM > DNSBL > IP-Blacklist > Bayesian > LLM
+### Die wichtigsten Befehle
 
-📖 Details: [CONFIGURATION.md - Blacklist/Whitelist-System](docs/CONFIGURATION.md#blacklistwhitelist-system)
-
-## Unterstützte E-Mail-Provider
-
-| Provider | IMAP-Server | Port | Spam-Ordner | Besonderheiten |
-|----------|-------------|------|-------------|----------------|
-| GMX | imap.gmx.net | 993 | Spamverdacht | IMAP aktivieren |
-| Gmail | imap.gmail.com | 993 | [Gmail]/Spam | App-Passwort erforderlich! |
-| Outlook | outlook.office365.com | 993 | Junk | - |
-| All-Inkl | wXXXX.kasserver.com | 993 | Spam | Server-Nr. anpassen |
-| Web.de | imap.web.de | 993 | Spamverdacht | - |
-| IONOS | imap.ionos.de | 993 | Spam | - |
-| Strato | imap.strato.de | 993 | Spam | - |
-| HostEurope | imap.hosteurope.de | 993 | Spam | - |
-
-📖 Weitere Details: [SETUP.md](docs/SETUP.md)
-
-## Filter-Modi
-
-Konfiguration in `config/settings.yaml`:
-
-### Modus "count"
-Analysiert die letzten X E-Mails (neueste zuerst):
-```yaml
-filter:
-  mode: "count"
-  limit: 50
+```bash
+make start                        # Filter starten
+make start DRYRUN=1               # Trockentest (nichts verschieben)
+make load-blacklists              # Externe IP/Domain-Blacklists laden
+make spam adresse@domain.de       # Zur Blacklist hinzufügen
+make unspam adresse@domain.de     # Zur Whitelist + Mails wiederherstellen
+make benchmark                    # Synthetischer Modell-Vergleich
+make benchmark-real               # Benchmark auf deinen eigenen Mails
+make help                         # Alle Befehle
 ```
 
-### Modus "days"
-Analysiert alle E-Mails der letzten X Tage:
-```yaml
-filter:
-  mode: "days"
-  days_back: 7
-```
-
-## Dokumentation
-
-- 📖 **[SETUP.md](docs/SETUP.md)** - Vollständige Setup-Anleitung mit Modellübersicht
-- 🔧 **[CONFIGURATION.md](docs/CONFIGURATION.md)** - Detaillierte Konfigurationsoptionen
-- 🤖 **[LLM.md](docs/LLM.md)** - LLM-Integration: Betriebsmodi, System-Prompt, Bayesian-Übergabe
-- 📚 **[AUTO_TRAINING.md](docs/AUTO_TRAINING.md)** - Auto-Training: Selbstlernender Filter, Cap-Strategie, Dedup
-- 🌐 **[BLACKLIST_SOURCES.md](docs/BLACKLIST_SOURCES.md)** - Externe Blacklist-Quellen & eigene Listen hinzufügen
-- ♻️ **[UNSPAM.md](docs/UNSPAM.md)** - Spam-Wiederherstellung: E-Mails aus Spam-Ordner zurückholen
-- 🔍 **[AUDIT.md](docs/AUDIT.md)** - Listen-Audit: Whitelist/Blacklist interaktiv durchsuchen und bereinigen
-- ⚠️ **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Problemlösungen & häufige Fehler
+---
 
 ## Systemanforderungen
 
-| Hardware | Empfohlenes Modell | RAM-Bedarf |
-|----------|-------------------|------------|
-| Schwach (bis 8GB) | gemma4:e4b | ~4GB |
-| Mittel (8-16GB) | gemma3:12b | ~8GB |
-| Stark (16GB+) | ministral3:14b | ~9GB |
+Python 3.8+. Für den LLM-Modus: [Ollama](https://ollama.com) und eines der getesteten Modelle.
+
+| Hardware | Empfohlenes Modell | RAM |
+|---|---|---|
+| Bis 8 GB | gemma4:e4b | ~4 GB |
+| 8–16 GB | gemma3:12b | ~8 GB |
+| 16 GB+ | ministral3:14b | ~9 GB |
+
+Getestete IMAP-Provider: GMX, Gmail, Outlook, All-Inkl, Web.de, IONOS, Strato, HostEurope und weitere.
+
+---
+
+## Dokumentation
+
+| | |
+|---|---|
+| [SETUP.md](docs/SETUP.md) | Vollständiges Setup, Modellauswahl, Ollama-Installation |
+| [CONFIGURATION.md](docs/CONFIGURATION.md) | Alle Einstellungen in `settings.yaml` |
+| [BENCHMARK.md](docs/BENCHMARK.md) | Benchmark-Tools: synthetisch und real, Scoring-Methodik, Ergebnisse |
+| [LLM.md](docs/LLM.md) | LLM-Integration, System-Prompt, Bayesian-Übergabe |
+| [AUTO_TRAINING.md](docs/AUTO_TRAINING.md) | Selbstlernender Filter, Auto-Training-Strategie |
+| [BLACKLIST_SOURCES.md](docs/BLACKLIST_SOURCES.md) | Externe Blacklists konfigurieren und erweitern |
+| [UNSPAM.md](docs/UNSPAM.md) | False Positives wiederherstellen |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Häufige Probleme und Lösungen |
+
+---
+
+## Lizenz
+
+Apache License 2.0 — siehe [LICENSE](LICENSE).
+
+Copyright 2025–2026 Kay Beißert. Projektnamens-Policy: [TRADEMARK.md](TRADEMARK.md).

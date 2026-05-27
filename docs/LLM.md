@@ -2,13 +2,13 @@
 
 ## Warum gibt es das LLM?
 
-Die deterministischen Filter-Stufen (Whitelist, Blacklist, TLD-Check, SPF/DKIM, DNSBL) arbeiten mit festen Regeln. Sie sind schnell und zuverlässig — aber sie können keinen Kontext verstehen. Eine E-Mail von `noreply@amazon.de` mit dem Betreff "Ihre Bestellung wurde versandt" und einer E-Mail von `noreply@amazon-konto-sicher.de` mit "Ihr Konto wird gesperrt — Sofort handeln!" sehen für eine Regel-Engine ähnlich aus. Für einen Menschen — oder ein Sprachmodell — ist der Unterschied sofort erkennbar.
+Die deterministischen Filter‑Stufen (Whitelist, Blacklist, TLD‑Check, SPF/DKIM, DNSBL) arbeiten mit festen Regeln. Sie sind schnell und zuverlässig — können aber keinen Kontext verstehen. Eine E‑Mail von `noreply@amazon.de` mit dem Betreff „Ihre Bestellung wurde versandt“ und eine E‑Mail von `noreply@amazon-konto-sicher.de` mit „Ihr Konto wird gesperrt — Sofort handeln!“ sehen für eine Regel‑Engine ähnlich aus. Für einen Menschen — oder ein Sprachmodell — ist der Unterschied sofort erkennbar.
 
 Der Bayesian-Filter schließt diese Lücke teilweise: er erkennt statistische Muster, die in den Trainingsdaten vorkommen. Was er nicht kann: neue, noch unbekannte Angriffsmuster erkennen, die Plausibilität einer Absender-Domain einschätzen oder den Kontext einer E-Mail wirklich verstehen.
 
-Das LLM ist die letzte Instanz in der Pipeline und übernimmt genau diese Aufgabe. Es wird für Fälle eingesetzt, bei denen einfachere Methoden unsicher sind oder — im Force-Modus — für jede Mail, die die deterministischen Stufen überlebt.
+Das LLM ist die letzte Instanz in der Pipeline und übernimmt genau diese Aufgabe. Es kommt nur dann zum Einsatz, wenn einfachere Methoden unsicher sind oder — im Force‑Modus — für jede Mail, die die deterministischen Stufen überlebt.
 
-Das LLM läuft dabei vollständig **lokal via Ollama** — keine Daten verlassen das System.
+Das LLM läuft vollständig **lokal via Ollama** — keine Daten verlassen das System.
 
 ---
 
@@ -42,7 +42,7 @@ Das LLM klassifiziert jede Mail in eine von vier Kategorien:
 | `COMMERCIAL` | Marketing einer real existierenden Firma, Abmeldelink vorhanden, kein Betrug | → Newsletter-Ordner |
 | `HAM` | Persönliche, geschäftliche oder transaktionale E-Mail ohne Spam-Muster | → Posteingang |
 
-**Wichtig:** `COMMERCIAL` landet nicht im Spam, sondern wird in den Newsletter-Ordner verschoben (konfigurierbar via `bayesian.newsletter.folder`). Damit unterscheidet der Filter zwischen echtem Spam und legitimen, aber unerwünschten Marketing-Mails.
+**Wichtig:** `COMMERCIAL` landet nicht im Spam, sondern wird in den Newsletter‑Ordner verschoben (konfigurierbar via `bayesian.newsletter.folder`). So unterscheidet der Filter echtes Spam von legitimen, aber unerwünschten Marketing‑Mails.
 
 ### Konfidenz-Stufen
 
@@ -54,7 +54,7 @@ Zusätzlich zur Kategorie gibt das LLM eine Konfidenz an:
 | `MITTEL` | Ein klares Signal, aber teilweise legitimer Kontext möglich |
 | `NIEDRIG` | Ambig, nur schwache Indizien |
 
-**Konfidenz-basiertes Downgrading:** Klassifiziert das LLM eine Mail als `SPAM` oder `PHISHING`, aber mit Konfidenz `NIEDRIG`, wird die Entscheidung zum Schutz vor False Positives automatisch zu `HAM` umgestuft. Im Log erscheint dann: `[downgraded: low confidence]`.
+**Konfidenz‑basiertes Downgrading:** Klassifiziert das LLM eine Mail als `SPAM` oder `PHISHING`, aber mit Konfidenz `NIEDRIG`, wird die Entscheidung zum Schutz vor False Positives automatisch zu `HAM` umgestuft. Im Log erscheint dann: `[downgraded: low confidence]`.
 
 ### Ausgabeformat (3 Zeilen)
 
@@ -66,7 +66,7 @@ Konfidenz: HOCH
 Gefälschte DHL-Domain (.ru) mit Zahlungslink auf .xyz-Domain.
 ```
 
-Dieses Format wird durch den System-Prompt erzwungen und von `ollama_client.py` ausgewertet. Die Zeile 1 bestimmt die Kategorie, Zeile 2 die Konfidenz, Zeile 3 erscheint im Log als Begründung.
+Dieses Format wird durch den System‑Prompt erzwungen und von `ollama_client.py` ausgewertet. Zeile 1 bestimmt die Kategorie, Zeile 2 die Konfidenz, Zeile 3 erscheint im Log als Begründung.
 
 ---
 
@@ -78,29 +78,29 @@ Dieses Format wird durch den System-Prompt erzwungen und von `ollama_client.py` 
 config/system_prompt.txt
 ```
 
-Der System-Prompt ist die "Arbeitsanweisung" für das LLM. Er definiert:
+Der System‑Prompt ist die „Arbeitsanweisung“ für das LLM. Er definiert:
 
-- Das erwartete Ausgabeformat (3 Zeilen, keine Abweichung)
-- Die vier Kategorien mit genauen Definitionen
+- das erwartete Ausgabeformat (3 Zeilen, keine Abweichung)
+- die vier Kategorien mit genauen Definitionen
 - Entscheidungsregeln mit Prioritäten (PHISHING > SPAM > COMMERCIAL > HAM)
-- Eine interne Chain-of-Thought-Analyse (nicht ausgegeben)
-- Konfidenz-Kalibrierungsregeln
-- Typische deutsche Spam-Muster
-- Sieben konkrete Beispiele mit Erklärungen
+- eine interne Chain‑of‑Thought‑Analyse (nicht ausgegeben)
+- Konfidenz‑Kalibrierungsregeln
+- typische deutsche Spam‑Muster
+- sieben konkrete Beispiele mit Erklärungen
 
 ### Trennung von System-Prompt und User-Prompt
 
 Das System ist bewusst in zwei Ebenen aufgeteilt:
 
-**System-Prompt** (`config/system_prompt.txt`) — unveränderlicher Kontext pro Sitzung:
+**System‑Prompt** (`config/system_prompt.txt`) — unveränderlicher Kontext pro Sitzung:
 - Verhaltensregeln, Kategorien, Entscheidungslogik, Beispiele
-- Wird einmal pro Analyse-Aufruf mitgeschickt
-- Kann frei bearbeitet und experimentiert werden, ohne Code anzufassen
+- Wird einmal pro Analyse‑Aufruf mitgeschickt
+- Kann frei bearbeitet werden, ohne Code anzufassen
 
-**User-Prompt** — dynamisch, pro Mail generiert:
-- Sender, Betreff, Body (escaped gegen Prompt-Injection)
-- Optionaler Auth-Status (SPF/DKIM-Ergebnis)
-- Optionaler Bayesian-Score (wenn `llm.use_bayesian_score: true` und `llm.force: true`)
+**User‑Prompt** — dynamisch, pro Mail generiert:
+- Sender, Betreff, Body (escaped gegen Prompt‑Injection)
+- Optionaler Auth‑Status (SPF/DKIM‑Ergebnis)
+- Optionaler Bayesian‑Score (wenn `llm.use_bayesian_score: true` und `llm.force: true`)
 
 ### System-Prompt anpassen
 

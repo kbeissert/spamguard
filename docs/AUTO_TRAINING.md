@@ -94,35 +94,35 @@ Alte Spam-Muster verlieren nach 12+ Monaten an Vorhersagekraft — aktuelle Angr
 
 ---
 
-## Re-Training
+## Re‑Training
 
 ### Automatisch (Standard)
 
-Am Ende jedes Filter-Laufs wird geprüft:
+Am Ende jedes Filter‑Laufs prüft das System, ob genug neue Samples gesammelt wurden:
 
 ```
-trainer.samples_added() >= retrain_every (Standard: 50)?
-  Ja → train_bayesian.py wird sofort gestartet
-  Nein → Hinweis: "X bis Re-Training"
+if trainer.samples_added() >= retrain_every (Standard: 50):
+    start train_bayesian.py
+else:
+    show "X bis Re-Training"
 ```
 
-Das Re-Training läuft **nach** der Zusammenfassung des Filter-Laufs — der User sieht den kompletten Trainings-Output in seinem Terminal:
+Das Re‑Training läuft nach der Zusammenfassung des Filterlaufs — der Nutzer sieht den kompletten Trainings‑Output im Terminal. Beispielauszug:
 
 ```
 ============================================================
 📊 Gesamtzusammenfassung
-...
 
-📚 52 neue Spam-Samples gesammelt (330 gesamt) — starte Re-Training...
+📚 52 neue Spam‑Samples gesammelt (330 gesamt) — starte Re‑Training...
 ============================================================
-🔄 Auto-Training: Bayesian-Modell wird neu trainiert...
+🔄 Auto‑Training: Bayesian‑Modell wird neu trainiert...
 ============================================================
 
-📂 Lese Training-Daten (3-Klassen (HAM/SPAM/NEWSLETTER))...
+📂 Lese Training‑Daten (3‑Klassen (HAM/SPAM/NEWSLETTER))...
    Spam: 330 Dateien
    HAM:  628 Dateien
    Newsletter: 1264 Dateien
-...
+
 ✅ Training abgeschlossen
 ```
 
@@ -132,7 +132,7 @@ Das Re-Training läuft **nach** der Zusammenfassung des Filter-Laufs — der Use
 make train
 ```
 
-Das manuelle Training berücksichtigt alle Samples — automatisch gesammelte und manuell hinzugefügte. Es ersetzt das automatische Re-Training nicht, sondern ergänzt es.
+Das manuelle Training berücksichtigt alle Samples — automatisch gesammelte und manuell hinzugefügte. Es ergänzt das automatische Re‑Training, ersetzt es nicht.
 
 ---
 

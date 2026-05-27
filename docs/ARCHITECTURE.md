@@ -15,9 +15,9 @@
 
 ## Architektur-Übersicht
 
-### 🛑 Erste Regel: Strict Separation of Concerns (Detection vs. Management)
+### Erste Regel: Strict Separation of Concerns (Detection vs. Management)
 
-Das gesamte SpamGuard-Projekt folgt einer unumstößlichen Prämisse: der strikten Trennung der reinen Spam-Erkennung (Detection) von nachgelagerten Verwaltungswerkzeugen (Management).
+Das SpamGuard‑Projekt folgt einer klaren Prämisse: strikte Trennung der reinen Spam‑Erkennung (Detection) von nachgelagerten Verwaltungswerkzeugen (Management).
 
 1. **Detection (Core Filter Loop):**
    Der Kern der Filter-Pipeline (`spam_filter.py`) ist kompromisslos sequentiell, ausfallsicher (`try...finally`) und minimalistisch. Sein **einziges** Ziel: E-Mails der 7-stufigen Pipeline zuführen, das Ergebnis loggen und Spam in den konfigurierten Ordner verschieben. Keine Management-Abhängigkeiten gefährden diesen Prozess.
@@ -25,9 +25,9 @@ Das gesamte SpamGuard-Projekt folgt einer unumstößlichen Prämisse: der strikt
 2. **Management (Downstream-Tools):**
    Verwaltungswerkzeuge – `unspam.py`, `manage_lists.py` – sind vollständig vom Filter-Core entkoppelt. Sie laufen als eigenständige Prozesse und dürfen den Filter-Loop niemals direkt aufrufen, verändern oder durch Seiteneffekte beeinflussen.
 
-### 🛑 Zweite Regel: Single Source of Truth (SSOT) & DRY (Don't Repeat Yourself)
+### Zweite Regel: Single Source of Truth (SSOT) & DRY (Don't Repeat Yourself)
 
-Jede logische Funktion hat **genau einen festen Platz** in einem spezifischen Modul.
+Jede logische Funktion hat genau einen festen Platz in einem spezifischen Modul.
 
 - **Wiederverwendung vor Neuerfindung:** Eine etablierte Funktion darf niemals in einem anderen Skript neu geschrieben, dupliziert oder als Hilfsfunktion ausgelagert werden.
 - **Erweiterung (Open/Closed Principle):** Reicht die Funktionalität eines Moduls nicht aus, abstrahiert man das ursprüngliche Modul so, dass es den neuen Fall mitabdeckt, ohne die alte Funktion zu verlieren.
@@ -45,12 +45,12 @@ Jede logische Funktion hat **genau einen festen Platz** in einem spezifischen Mo
 | E-Mail-Parsing-Hilfsfunktionen | `src/utils.py` |
 | Auto-Training (Dedup, Cap, Retrain-Trigger) | `src/spam_trainer.py` |
 
-### 🛑 Dritte Regel: Configuration-Driven & No Magic Numbers
+### Dritte Regel: Configuration‑Driven & No Magic Numbers
 
-SpamGuard läuft strikt über Konfigurationen.
+SpamGuard wird komplett konfigurationsgesteuert betrieben.
 
-- **Keine Magic Numbers:** Alle Schwellenwerte, Timeouts, Pfade und Limits stehen außerhalb des Python-Codes.
-- **Auslagerung:** Diese Werte stehen in zentralen YAML-Dateien oder in `src/constants.py` und werden von dort importiert.
+- Keine Magic Numbers: Alle Schwellenwerte, Timeouts, Pfade und Limits liegen außerhalb des Python‑Codes.
+- Auslagerung: Diese Werte stehen in zentralen YAML‑Dateien oder in `src/constants.py` und werden dort importiert.
 
 ```python
 # ❌ Falsch: Magic Number im Code

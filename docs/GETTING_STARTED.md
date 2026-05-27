@@ -6,7 +6,7 @@
 
 ## 📋 Was du brauchst (5 Minuten Vorbereitung)
 
-Bevor du anfängst, stelle sicher dass du:
+Bevor du anfängst, stelle sicher, dass du:
 
 - [ ] Einen E-Mail-Account hast (GMX, Gmail, Outlook, etc.)
 - [ ] Dein E-Mail-Passwort kennst
@@ -14,14 +14,14 @@ Bevor du anfängst, stelle sicher dass du:
 - [ ] Terminal/Kommandozeile öffnen kannst
 - [ ] Python 3.8 oder neuer installiert hast
 
-**Wie prüfe ich ob Python installiert ist?**
+**Wie prüfe ich, ob Python installiert ist?**
 ```bash
 python --version
 # oder
 python3 --version
 ```
 
-Sollte etwas wie `Python 3.10.0` anzeigen. Wenn nicht → [Python installieren](https://www.python.org/downloads/)
+Sollte etwas wie `Python 3.10.0` anzeigen. Wenn nicht → Python installieren: https://www.python.org/downloads/
 
 ---
 
@@ -106,7 +106,7 @@ accounts:
     enabled: true
 ```
 
-**💡 Tipp:** Die Datei `config/accounts.yaml.example` im Projekt enthält weitere Beispiele!
+💡 Tipp: Die Datei `config/accounts.yaml.example` im Projekt enthält weitere Beispiele.
 
 #### 2.2 Ollama starten
 

@@ -6,34 +6,32 @@ Lösungen für typische Fehler beim Betrieb des Spam-Filters.
 
 ## Verbindungsprobleme
 
-### ❌ "Ollama nicht erreichbar!"
+### ❌ „Ollama nicht erreichbar“
 
-**Symptom**:
+Symptom:
 ```
 ❌ Ollama nicht erreichbar!
    Starte in anderem Terminal: ollama serve
 ```
 
-**Ursachen & Lösungen**:
+Ursachen & Lösungen:
 
-1. **Ollama läuft nicht**
-   ```bash
-   # Starte Ollama
-   ollama serve
-   ```
+1. Ollama läuft nicht
+```bash
+# Starte Ollama
+ollama serve
+```
 
-2. **Falsche URL**
-   ```bash
-   # In ollama.yaml prüfen
-   url: http://localhost:11434
+2. Falsche URL
+```bash
+# In config/settings.yaml prüfen: llm.url
+# Standard: http://localhost:11434
+curl http://localhost:11434/api/tags
+```
 
-   # Ollama-Status testen
-   curl http://localhost:11434/api/tags
-   ```
-
-3. **Firewall blockiert**
-   - Erlaube Localhost-Verbindungen auf Port 11434
-   - macOS: Systemeinstellungen → Sicherheit → Firewall
+3. Firewall blockiert
+- Erlaube Localhost‑Verbindungen auf Port 11434
+- macOS: Systemeinstellungen → Sicherheit → Firewall
 
 ---
 

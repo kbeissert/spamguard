@@ -30,27 +30,27 @@ accounts:
 
 ---
 
-### 2. `config/settings.yaml` - Alle Einstellungen
-**Zweck**: Zentrale Konfiguration für Filter, LLM und Bayesian  
-**Format**: YAML  
-**Versionierung**: ❌ NICHT in Git (persönliche Einstellungen)
+### 2. `config/settings.yaml` — Alle Einstellungen
+Zweck: Zentrale Konfiguration für Filter, LLM und Bayesian
 
-**Erstellen:**
+Format: YAML — nicht in Git (enthält persönliche Einstellungen)
+
+Erstellen:
 ```bash
 cp config/settings.yaml.example config/settings.yaml
 ```
 
-**Vollständiges Beispiel**:
+Vollständiges Beispiel:
 ```yaml
 # Filter: Welche E-Mails werden geprüft?
 filter:
   mode: "days"      # "count" = letzte X Mails | "days" = letzte X Tage
-  days_back: 7      # Tage zurück (bei mode: "days")
-  limit: 50         # Anzahl E-Mails (bei mode: "count")
+  days_back: 7       # Tage zurück (bei mode: "days")
+  limit: 50          # Anzahl E-Mails (bei mode: "count")
 
 # LLM (Ollama) - Optional
 llm:
-  enabled: false    # false = kein Ollama nötig (~88-90% Genauigkeit)
+  enabled: false     # false = kein Ollama nötig (~88-90% Genauigkeit)
   url: "http://localhost:11434"
   model: "gemma3:12b"
   timeouts:

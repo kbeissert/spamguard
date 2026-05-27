@@ -30,7 +30,7 @@ python scripts/audit_lists.py --blacklist  # Direkt Blacklist
 
 ### Modus 1: Listenauswahl (Standard)
 
-Wird `make audit` ohne weitere Argumente gestartet, fragt das Tool zunächst welche Liste geprüft werden soll. Die aktuelle Anzahl der Einträge wird dabei direkt angezeigt:
+`make audit` fragt beim Start, welche Liste geprüft werden soll. Die aktuelle Anzahl der Einträge wird direkt angezeigt. Beispielausgabe:
 
 ```
 ╔══════════════════════════════════════════════════════╗
@@ -45,9 +45,9 @@ Wird `make audit` ohne weitere Argumente gestartet, fragt das Tool zunächst wel
   Auswahl:
 ```
 
-- **W** — öffnet die Whitelist
-- **B** — öffnet die Blacklist
-- **A** — beide Listen nacheinander (erst Whitelist, dann Blacklist)
+- W — öffnet die Whitelist
+- B — öffnet die Blacklist
+- A — beide Listen nacheinander (erst Whitelist, dann Blacklist)
 
 ### Modus 2: Direktstart Whitelist
 

@@ -6,9 +6,9 @@ Diese Anleitung zeigt dir wie du E-Mails als `.eml` Dateien aus verschiedenen E-
 
 ## 📋 Was du brauchst
 
-- Zugang zu deinem E-Mail-Account (Webmail oder E-Mail-Client)
-- Mindestens 100 Spam-Mails und 100 echte Mails
-- Einen Ordner auf deinem Computer: `data/training/spam/` und `data/training/ham/`
+- Zugang zu deinem E‑Mail‑Account (Webmail oder E‑Mail‑Client)
+- Mindestens 100 Spam‑Mails und 100 echte Mails
+- Ordner auf deinem Computer: `data/training/spam/` und `data/training/ham/`
 
 ---
 

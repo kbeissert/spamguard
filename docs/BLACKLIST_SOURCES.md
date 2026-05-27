@@ -46,21 +46,21 @@ Beim nächsten `make start` werden alle aktivierten Listen automatisch verwendet
 
 **Hinweis:** `ip_cidr`-Listen werden korrekt als Netzwerke ausgewertet — eine IP wie `1.2.3.100` wird in `1.2.3.0/24` erkannt.
 
-## 🌐 Verfügbare Blacklist-Quellen
+## 🌐 Verfügbare Blacklist‑Quellen
 
-### IP-Blacklists (Standard aktiv)
+### IP‑Blacklists (Standard aktiv)
 
 #### Spamhaus DROP
 - **URL**: https://www.spamhaus.org/drop/drop.txt
 - **Typ**: `ip_cidr`
-- **Beschreibung**: Don't Route Or Peer — bekannte Spam-Netzwerke
+- **Beschreibung**: Don't Route Or Peer — bekannte Spam‑Netzwerke
 - **Update**: Täglich
 - **Größe**: ~1.000 Einträge
 
 #### Spamhaus EDROP
 - **URL**: https://www.spamhaus.org/drop/edrop.txt
 - **Typ**: `ip_cidr`
-- **Beschreibung**: Extended DROP — zusätzliche Spam-Netzwerke
+- **Beschreibung**: Extended DROP — zusätzliche Spam‑Netzwerke
 - **Größe**: ~500 Einträge
 
 #### Blocklist.de
@@ -73,51 +73,51 @@ Beim nächsten `make start` werden alle aktivierten Listen automatisch verwendet
 #### Feodo Tracker
 - **URL**: https://feodotracker.abuse.ch/downloads/ipblocklist.txt
 - **Typ**: `ip`
-- **Beschreibung**: Banking-Trojaner C2-Server IPs
+- **Beschreibung**: Banking‑Trojaner C2‑Server IPs
 - **Größe**: ~500 Einträge
 
-### Domain-Blacklists (Phishing & Malware)
+### Domain‑Blacklists (Phishing & Malware)
 
 #### Phishing Army
 - **URL**: https://phishing.army/download/phishing_army_blocklist_extended.txt
 - **Typ**: `domain`
-- **Beschreibung**: Aktuelle Phishing-Domains
+- **Beschreibung**: Aktuelle Phishing‑Domains
 - **Größe**: ~100.000+ Einträge
 
 #### CERT Poland
 - **URL**: https://hole.cert.pl/domains/v2/domains.txt
 - **Typ**: `domain`
-- **Beschreibung**: Phishing-Domains aus Polen
+- **Beschreibung**: Phishing‑Domains aus Polen
 - **Größe**: ~10.000 Einträge
 
 #### Firebog Malicious
 - **URL**: https://v.firebog.net/hosts/Prigent-Malware.txt
 - **Typ**: `domain`
-- **Beschreibung**: Malware/Phishing-Domains
+- **Beschreibung**: Malware/Phishing‑Domains
 - **Größe**: ~15.000 Einträge
 
 #### Abuse.ch URLhaus
 - **URL**: https://urlhaus.abuse.ch/downloads/text/
 - **Typ**: `domain`
-- **Beschreibung**: Aktive Malware-URLs
+- **Beschreibung**: Aktive Malware‑URLs
 - **Größe**: ~10.000+ Einträge
 
-### Spam-Quellen (optional)
+### Spam‑Quellen (optional)
 
 #### StopForumSpam
 - **URL**: https://www.stopforumspam.com/downloads/toxic_domains_whole.txt
 - **Typ**: `domain`
-- **Beschreibung**: Domains bekannter Spam-Quellen
+- **Beschreibung**: Domains bekannter Spam‑Quellen
 - **Größe**: ~5.000 Einträge
 
 #### Disposable Email Domains
 - **URL**: https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf
 - **Typ**: `domain`
-- **Beschreibung**: Wegwerf-E-Mail-Provider (z.B. 10minutemail.com)
+- **Beschreibung**: Wegwerf‑E‑Mail‑Provider (z.B. 10minutemail.com)
 - **Größe**: ~20.000+ Einträge
-- **⚠️ Warnung**: Blockiert ggf. legitime temporäre E-Mail-Dienste
+- **⚠️ Warnung**: Blockiert ggf. legitime temporäre E‑Mail‑Dienste
 
-### Werbe-Domains (sehr aggressiv, deaktiviert)
+### Werbe‑Domains (sehr aggressiv, deaktiviert)
 
 #### Firebog Advertisers
 - **URL**: https://v.firebog.net/hosts/Easylist.txt

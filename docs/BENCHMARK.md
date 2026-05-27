@@ -80,11 +80,11 @@ Erkenntnis aus Tests: Reasoning bringt bei Spam-Klassifikation oft keinen Vortei
 
 ---
 
-## 2. Real-Data Benchmark (`make benchmark-real`)
+## 2. Real‑Data Benchmark (`make benchmark-real`)
 
-Testet Modelle auf **deinen eigenen echten Mails** aus `data/training/`. Der Bayesian-Filter scoret jede Mail vorab und teilt sie in drei Gruppen auf — exakt so, wie es der Filter in der Produktion tut. Das Modell bekommt dabei den Bayesian-Score als Hint übergeben (z.B. `BAYESIAN-SCORE: 0.43 (UNSICHER)`), genau wie im echten Filtervorgang.
+Testet Modelle auf deinen echten Mails aus `data/training/`. Der Bayesian‑Filter scoret jede Mail vorab und teilt sie in drei Gruppen — genau wie in Produktion. Das Modell erhält den Bayesian‑Score als Hint (z.B. `BAYESIAN‑SCORE: 0.43 (UNSICHER)`), wie im Filtervorgang.
 
-Das macht diesen Benchmark zum einzig wirklich aussagekräftigen Test für deinen Einsatzfall.
+Das macht diesen Benchmark zum aussagekräftigsten Test für deinen Einsatzfall.
 
 ### Starten
 
@@ -108,24 +108,24 @@ Richtwert: ~2–4 Stunden für 10 Modelle × 75 Mails.
 
 ### Die drei Testgruppen
 
-Der Bayesian-Filter läuft vorab über alle `.eml`-Dateien in `data/training/spam/` und `data/training/ham/` und verteilt sie nach Score:
+Der Bayesian‑Filter läuft vorab über alle `.eml`‑Dateien in `data/training/spam/` und `data/training/ham/` und verteilt sie nach Score:
 
 ```
-Bayesian-Score 0.00 ──────────────────────────────── 1.00
+Bayesian‑Score 0.00 ──────────────────────────────── 1.00
                │          │                │
               HAM        UNSICHER         SPAM
             (< 0.30)   (0.30–0.50)      (> 0.50)
                             │
-                      G1: LLM-Aufgabe
+                      G1: LLM‑Aufgabe
 ```
 
-| Gruppe | Inhalt | Mails | Score-Gewicht |
+| Gruppe | Inhalt | Mails | Score‑Gewicht |
 |--------|--------|-------|---------------|
-| **G1 – Unsicher** | Bayesian-Score 0.30–0.50 — weder klar HAM noch klar Spam. Das sind genau die Fälle, die der Filter in Produktion an das LLM weitergibt. Balanciert: je 15 Spam + 15 HAM. | 30 | **60%** |
-| **G2 – Klares HAM** | Score < 0.30 — Mails die der Bayesian klar als HAM erkennt. Testet ob das LLM legitime Mails fälschlich als Spam markiert (False Positives). | 30 | **30%** |
-| **G3 – Klarer Spam** | Score > 0.80 — Mails die der Bayesian klar als Spam erkennt. Konfidenz-Check: Ein gutes Modell muss hier zuverlässig SPAM sagen. | 15 | Nur Report |
+| **G1 – Unsicher** | Bayesian‑Score 0.30–0.50 — weder klar HAM noch klar SPAM. Das sind die Fälle, die der Filter in Produktion ans LLM gibt. Balanciert: je 15 SPAM + 15 HAM. | 30 | **60%** |
+| **G2 – Klares HAM** | Score < 0.30 — Mails, die der Bayesian klar als HAM erkennt. Testet, ob das LLM legitime Mails fälschlich als SPAM markiert (False Positives). | 30 | **30%** |
+| **G3 – Klarer Spam** | Score > 0.80 — Mails, die der Bayesian klar als SPAM erkennt. Konfidenz‑Check: Ein gutes Modell muss hier zuverlässig SPAM sagen. | 15 | Nur Report |
 
-**Warum G1 balanciert (50/50)?** Ohne Balancierung enthält G1 oft deutlich mehr HAM als Spam (weil Bayesian HAM schlechter als Spam klassifiziert). Ein Modell das immer "HAM" antwortet, würde so ~67% G1-Accuracy erreichen ohne wirklich zu klassifizieren. Die 50/50-Balancierung verhindert diesen Trick.
+**Warum G1 balanciert (50/50)?** Ohne Balancierung enthält G1 oft deutlich mehr HAM als SPAM (der Bayesian filtert HAM schlechter als SPAM). Ein Modell, das immer "HAM" antwortet, würde so ~67% G1‑Accuracy erzielen, ohne wirklich zu klassifizieren. Die 50/50‑Balancierung verhindert diesen Trick.
 
 ### Score-Berechnung
 

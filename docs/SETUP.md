@@ -1,6 +1,6 @@
 # Setup-Anleitung: Spam Guard
 
-Schritt-für-Schritt-Anleitung zur Ersteinrichtung des lokalen Spam-Filters.
+Schritt‑für‑Schritt‑Anleitung zur Ersteinrichtung des lokalen Spam‑Filters.
 
 ---
 
@@ -31,19 +31,19 @@ Oder ZIP herunterladen und entpacken.
 
 ---
 
-### 2. Python-Dependencies installieren
+### 2. Python‑Dependencies installieren
 
-Wir verwenden ein **virtuelles Environment** (`.venv`), um Konflikte mit anderen Projekten zu vermeiden. Das `Makefile` übernimmt die Einrichtung automatisch.
+Wir verwenden ein **virtuelles Environment** (`.venv`), um Konflikte mit anderen Projekten zu vermeiden. Das `Makefile` richtet das automatisch ein.
 
 ```bash
 make install
 ```
 
-Dieser Befehl:
-1.  Erstellt einen Ordner `.venv` im Projektverzeichnis.
-2.  Installiert alle benötigten Pakete via `pip install -e .` in dieses Environment (nutzt `pyproject.toml`).
+Der Befehl:
+1. Erstellt `.venv` im Projektverzeichnis
+2. Installiert die benötigten Pakete via `pip install -e .` (nutzt `pyproject.toml`)
 
-**Hinweis**: Du musst das Environment nicht manuell aktivieren. Alle `make`-Befehle (z.B. `make start`, `make benchmark`) nutzen automatisch das korrekte Python aus `.venv`.
+Hinweis: Du musst das Environment nicht manuell aktivieren — alle `make`‑Befehle (z. B. `make start`, `make benchmark`) nutzen automatisch das richtige Python aus `.venv`.
 
 ---
 
@@ -57,8 +57,7 @@ brew install ollama
 # Linux
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Windows
-# Download von https://ollama.ai/download
+# Windows: Download von https://ollama.ai/download
 ```
 
 #### Ollama starten
@@ -82,9 +81,9 @@ sudo systemctl enable ollama
 sudo systemctl start ollama
 ```
 
-#### LLM-Modell herunterladen
+#### LLM‑Modell herunterladen
 ```bash
-# Empfohlenes Modell für mittlere Systeme (16GB RAM)
+# Empfohlen (mittlere Systeme, ~16GB RAM)
 ollama pull gemma3:12b
 
 # Für starke Systeme (beste Erkennungsrate)
