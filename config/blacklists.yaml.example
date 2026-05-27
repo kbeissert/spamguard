@@ -1,0 +1,115 @@
+# ============================================
+# SpamGuard - Externe Blacklist-Quellen
+# ============================================
+#
+# Diese Datei definiert externe Blacklist-Provider.
+# Bearbeite config/blacklists.yaml um Quellen zu aktivieren/deaktivieren.
+#
+# Befehle:
+#   make load-blacklists    Listen jetzt herunterladen
+#   make start              Filter startet mit aktivierten Listen
+#
+# Format pro Quelle:
+#   name_der_quelle:
+#     url: "https://example.com/list.txt"
+#     type: "ip_cidr"      # ip, ip_cidr, domain oder email
+#     description: "Beschreibung"
+#     enabled: true         # true = aktiviert, false = deaktiviert
+#
+# Typen:
+#   ip       - Einzelne IP-Adressen (z.B. 1.2.3.4)
+#   ip_cidr  - IP-Bereiche in CIDR-Notation (z.B. 192.168.0.0/24)
+#   domain   - Domains (z.B. spam-domain.com)
+#   email    - Einzelne E-Mail-Adressen (selten genutzt)
+
+
+# ============================================
+# IP-Blacklists (empfohlen für alle)
+# ============================================
+
+spamhaus_drop:
+  url: "https://www.spamhaus.org/drop/drop.txt"
+  type: "ip_cidr"
+  description: "Spamhaus DROP - Bekannte Spam-Netze (sehr zuverlässig)"
+  enabled: true
+
+spamhaus_edrop:
+  url: "https://www.spamhaus.org/drop/edrop.txt"
+  type: "ip_cidr"
+  description: "Spamhaus EDROP - Erweiterte DROP-Liste"
+  enabled: true
+
+blocklist_de:
+  url: "https://lists.blocklist.de/lists/all.txt"
+  type: "ip"
+  description: "Blocklist.de - IPs mit bekannten Angriffen (SSH, Mail, FTP etc.)"
+  enabled: true
+
+feodo_tracker_c2:
+  url: "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+  type: "ip"
+  description: "Feodo Tracker - Banking-Trojaner C2-Server IPs"
+  enabled: true
+
+
+# ============================================
+# Domain-Blacklists (Phishing & Malware)
+# ============================================
+
+phishing_army:
+  url: "https://phishing.army/download/phishing_army_blocklist_extended.txt"
+  type: "domain"
+  description: "Phishing Army - Aktuelle Phishing-Domains"
+  enabled: true
+
+cert_pl_phishing:
+  url: "https://hole.cert.pl/domains/v2/domains.txt"
+  type: "domain"
+  description: "CERT Poland - Phishing-Domains"
+  enabled: true
+
+firebog_malicious:
+  url: "https://v.firebog.net/hosts/Prigent-Malware.txt"
+  type: "domain"
+  description: "Firebog - Malware/Phishing-Domains"
+  enabled: true
+
+abuse_ch_urlhaus:
+  url: "https://urlhaus.abuse.ch/downloads/text/"
+  type: "domain"
+  description: "Abuse.ch URLhaus - Aktive Malware-URLs"
+  enabled: true
+
+
+# ============================================
+# Spam-Quellen (optional, aggressiver)
+# ============================================
+
+stopforumspam:
+  url: "https://www.stopforumspam.com/downloads/toxic_domains_whole.txt"
+  type: "domain"
+  description: "StopForumSpam - Domains bekannter Spam-Quellen"
+  enabled: true
+
+dispose_email:
+  url: "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"
+  type: "domain"
+  description: "Wegwerf-E-Mail-Domains (Temp-Mail-Anbieter)"
+  enabled: false
+
+
+# ============================================
+# Werbe-Domains (sehr aggressiv, Vorsicht!)
+# ============================================
+
+firebog_advertisers:
+  url: "https://v.firebog.net/hosts/Easylist.txt"
+  type: "domain"
+  description: "Firebog - Werbe-Domains (VORSICHT: blockiert auch Newsletter!)"
+  enabled: false
+
+matomo_referrer_spam:
+  url: "https://raw.githubusercontent.com/matomo-org/referrer-spam-list/master/spammers.txt"
+  type: "domain"
+  description: "Matomo Referrer-Spam-Domains"
+  enabled: false

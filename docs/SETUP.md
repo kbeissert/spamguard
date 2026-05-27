@@ -136,20 +136,17 @@ ACCOUNTS_FILE=config/accounts.yaml
 LOG_PATH=~/spam_filter.log
 ```
 
-#### filter.yaml erstellen
+#### settings.yaml erstellen
 ```bash
-cp config/filter.yaml.example config/filter.yaml
+cp config/settings.yaml.example config/settings.yaml
 ```
 
-**Bearbeite `config/filter.yaml`**:
+**Bearbeite `config/settings.yaml`** (filter-Sektion für erste Tests):
 ```yaml
 filter:
-  mode: "days"   # "count" oder "days"
-  days_back: 7   # Tage zurück (bei mode: "days")
-  limit: 50      # Anzahl E-Mails (bei mode: "count")
+  mode: "count"
+  limit: 5   # Für erste Tests niedrig wählen
 ```
-
-Für erste Tests empfohlen: `mode: "count"` mit `limit: 5`
 
 #### settings.yaml erstellen
 ```bash
@@ -243,7 +240,7 @@ python test_connection.py
 
 **Was wird getestet?**
 1. **Ollama-Verbindung**: Ist Ollama erreichbar auf `http://localhost:11434`?
-2. **LLM-Modell**: Ist das in `ollama.yaml` konfigurierte Modell installiert?
+2. **LLM-Modell**: Ist das in `config/settings.yaml` (`llm.model`) konfigurierte Modell installiert?
 3. **E-Mail-Accounts**: Für jeden Account in `accounts.yaml`:
    - SSL-Verbindung zum IMAP-Server
    - Login mit Benutzername/Passwort
@@ -314,7 +311,7 @@ python test_connection.py
 
 **Wichtig**: Starte mit **niedrigem Limit** für erste Tests!
 
-Bearbeite `config/filter.yaml`:
+Bearbeite `config/settings.yaml` (filter-Sektion):
 ```yaml
 filter:
   mode: "count"
@@ -360,7 +357,7 @@ python src/spam_filter.py
 
 ### 1. Filter-Limit erhöhen
 
-Nach erfolgreichen Tests in `config/filter.yaml`:
+Nach erfolgreichen Tests in `config/settings.yaml`:
 ```yaml
 filter:
   mode: "count"
@@ -650,6 +647,7 @@ Gehe diese Schritte durch, um sicherzustellen, dass alles richtig konfiguriert i
 - [ ] **LLM-Modell** heruntergeladen (`ollama pull gemma3:12b` oder Alternative)
 - [ ] **`.env`** erstellt und angepasst (aus `.env.example`)
 - [ ] **`config/settings.yaml`** erstellt und angepasst (aus `settings.yaml.example`)
+- [ ] **`config/blacklists.yaml`** erstellt (aus `blacklists.yaml.example`) + `make load-blacklists`
 - [ ] **`accounts.yaml`** erstellt und angepasst (aus `accounts.yaml.example`)
 - [ ] Mindestens **ein Account** mit `enabled: true`
 - [ ] **Verbindungstest erfolgreich** (`make test` → alle ✅)
@@ -709,5 +707,5 @@ tail -f ~/spam_filter.log
 
 ### False Positives vermeiden
 - Prüfe regelmäßig den Spam-Ordner
-- Bei häufigen Fehlern: Modell in `ollama.yaml` wechseln
+- Bei häufigen Fehlern: Modell in `config/settings.yaml` (`llm.model`) wechseln
 - Wichtige Absender zur Whitelist hinzufügen: `make unspam wichtig@firma.de`

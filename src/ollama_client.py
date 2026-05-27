@@ -12,7 +12,7 @@ from typing import Tuple
 import requests
 import yaml
 
-from constants import LLM_MIN_RESPONSE_LENGTH, SPAM_VERDICT_LABELS, HTTP_STATUS_OK
+from constants import LLM_MIN_RESPONSE_LENGTH, SPAM_VERDICT_LABELS, HTTP_STATUS_OK, LLM_NUM_PREDICT_FAST
 
 # ============================================
 # Konfiguration laden
@@ -55,7 +55,7 @@ CHECK_TIMEOUT: int = _timeouts.get("availability", 3)
 
 _inference = _cfg.get("inference", {})
 TEMPERATURE: float = _inference.get("temperature", 0.1)
-NUM_PREDICT: int = _inference.get("num_predict", 150)
+NUM_PREDICT: int = _inference.get("num_predict", LLM_NUM_PREDICT_FAST)
 
 
 # ============================================
@@ -141,47 +141,57 @@ def check_availability() -> bool:
         return False
 
 
-def _parse_spam_verdict(result_text: str) -> bool:
+def _parse_llm_response(result_text: str) -> Tuple[bool, str, str]:
     """
-    Parse LLM response for a spam verdict.
+    Parst LLM-Antwort und extrahiert Verdict, Kategorie und Konfidenz.
 
-    Reads the first non-empty line's first word. If it matches a known spam
-    category (SPAM/PHISHING/COMMERCIAL), returns True. If HAM, returns False.
-    Falls back to scanning all lines, then defaults to HAM (fail-safe).
+    Erwartet Format (3 Zeilen):
+      Zeile 1: SPAM | PHISHING | COMMERCIAL | HAM
+      Zeile 2: Konfidenz: HOCH | MITTEL | NIEDRIG
+      Zeile 3: Begründung
+
+    Returns:
+        (is_spam, category, confidence)
+        - is_spam:    True nur bei SPAM/PHISHING
+        - category:   "SPAM" | "PHISHING" | "COMMERCIAL" | "HAM"
+        - confidence: "HOCH" | "MITTEL" | "NIEDRIG" | ""
     """
+    _CATEGORIES  = frozenset(["SPAM", "PHISHING", "COMMERCIAL", "HAM"])
+    _CONFIDENCES = frozenset(["HOCH", "MITTEL", "NIEDRIG"])
+
     if not result_text or len(result_text.strip()) < LLM_MIN_RESPONSE_LENGTH:
         logging.warning("LLM-Antwort zu kurz oder leer, behandle als HAM")
-        return False
+        return False, "HAM", ""
 
-    lines = result_text.strip().splitlines()
+    lines = [l.strip() for l in result_text.strip().splitlines() if l.strip()]
 
-    # Pass 1: first non-empty line's first word
+    # Kategorie: erste Zeile, deren erstes Wort eine bekannte Kategorie ist
+    category = "UNKNOWN"
     for line in lines:
-        words = line.strip().upper().split()
-        if not words:
-            continue
-        verdict = words[0]
-        if verdict in SPAM_VERDICT_LABELS:
-            return True
-        if verdict == "HAM":
-            return False
-        break  # first non-empty line didn't yield a known verdict
+        first_word = line.upper().split()[0] if line else ""
+        if first_word in _CATEGORIES:
+            category = first_word
+            break
 
-    # Pass 2: scan all lines for a line starting with a verdict word
+    if category == "UNKNOWN":
+        logging.warning(f"Unbekannte LLM-Kategorie, behandle als HAM: {result_text[:100]!r}")
+        category = "HAM"
+
+    # Konfidenz: erste Zeile die "Konfidenz:" enthält
+    confidence = ""
     for line in lines:
-        words = line.strip().upper().split()
-        if not words:
-            continue
-        if words[0] in SPAM_VERDICT_LABELS:
-            return True
-        if words[0] == "HAM":
-            return False
+        if "KONFIDENZ:" in line.upper():
+            after = line.upper().split("KONFIDENZ:", 1)[1].strip()
+            first_word = after.split()[0] if after else ""
+            if first_word in _CONFIDENCES:
+                confidence = first_word
+            break
 
-    logging.warning(f"Uneindeutige LLM-Antwort, behandle als HAM: {result_text[:100]!r}")
-    return False
+    is_spam = category in SPAM_VERDICT_LABELS
+    return is_spam, category, confidence
 
 
-def query_spam(prompt: str, system_prompt: str = "") -> Tuple[bool, str]:
+def query_spam(prompt: str, system_prompt: str = "") -> Tuple[bool, str, str, str]:
     """
     Sendet einen Spam-Erkennungs-Prompt an Ollama und wertet die Antwort aus.
 
@@ -190,7 +200,11 @@ def query_spam(prompt: str, system_prompt: str = "") -> Tuple[bool, str]:
         system_prompt: System-Prompt mit Kontext und Beispielen für das LLM
 
     Returns:
-        Tuple[bool, str]: (is_spam, reason)
+        Tuple[bool, str, str, str]: (is_spam, reason, category, confidence)
+        - is_spam:    True nur bei SPAM/PHISHING
+        - reason:     Rohe LLM-Antwort (einzeilig)
+        - category:   "SPAM" | "PHISHING" | "COMMERCIAL" | "HAM"
+        - confidence: "HOCH" | "MITTEL" | "NIEDRIG" | ""
     """
     messages = []
     if system_prompt:
@@ -212,19 +226,19 @@ def query_spam(prompt: str, system_prompt: str = "") -> Tuple[bool, str]:
         result_json = response.json()
         result_text = result_json.get("message", {}).get("content", "").strip()
 
-        is_spam = _parse_spam_verdict(result_text)
+        is_spam, category, confidence = _parse_llm_response(result_text)
         clean_reason = result_text.replace("\n", " ").strip()
 
-        return is_spam, clean_reason
+        return is_spam, clean_reason, category, confidence
 
     except requests.Timeout:
         logging.warning("LLM-Request timeout, behandle als HAM")
-        return False, "LLM Timeout (als HAM behandelt)"
+        return False, "LLM Timeout (als HAM behandelt)", "HAM", ""
     except requests.ConnectionError:
         logging.error("Ollama nicht erreichbar - ist 'ollama serve' aktiv?")
         print("\n⚠️  Ollama nicht erreichbar!")
         print("   Starte in anderem Terminal: ollama serve")
-        return False, "Ollama offline (als HAM behandelt)"
+        return False, "Ollama offline (als HAM behandelt)", "HAM", ""
     except Exception as e:
         logging.error(f"LLM-Fehler: {e}", exc_info=True)
-        return False, f"Fehler: {e!s}"
+        return False, f"Fehler: {e!s}", "HAM", ""

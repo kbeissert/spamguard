@@ -20,6 +20,11 @@ filter:
 llm:
   # false = kein Ollama nötig (~88-90% Genauigkeit, nur Bayesian)
   # true  = Ollama erforderlich (~94-96% Genauigkeit)
+  #
+  # ⚠️  WICHTIG: Damit LLM tatsächlich aufgerufen wird, müssen BEIDE Schalter aktiv sein:
+  #   llm.enabled: true           ← aktiviert Ollama-Integration
+  #   bayesian.llm_fallback: true ← lässt unsichere Mails zum LLM eskalieren
+  #   (llm_fallback: false → unsichere Mails gehen direkt als HAM durch)
   enabled: false
 
   url: "http://localhost:11434"
@@ -32,7 +37,23 @@ llm:
 
   inference:
     temperature: 0.1    # 0.0 = deterministisch, 1.0 = kreativ
-    num_predict: 150    # Max. generierte Token pro Antwort
+    num_predict: 80     # Max. generierte Token pro Antwort (3-Zeilen-Format braucht ~50)
+
+# --------------------------------------------
+# Diagnose & Debugging
+# --------------------------------------------
+# ⚠️  Nur für Tests — nicht für den Produktionsbetrieb geeignet.
+# Dokumentation: docs/LLM.md → Abschnitt "Diagnose & Debugging"
+llm_diagnostics:
+  # Force-Modus: LLM läuft für JEDE Mail (Bayesian gibt keinen frühen Exit mehr).
+  # Negiert den Effizienzgewinn des Bayesian-Filters — Durchsatz ~15-25 Mails/min.
+  # Sinnvoll zum Prüfen ob Ollama + Modell korrekt antworten.
+  # Nach dem Test: auf false setzen und bayesian.llm_fallback: true für Produktion nutzen.
+  force: false
+
+  # Bayesian-Score als Kontext-Hint in den LLM-User-Prompt einfügen.
+  # Nur wirksam wenn force: true. System-Prompt bleibt davon unberührt.
+  use_bayesian_score: true
 
 # --------------------------------------------
 # Bayesian Filter
@@ -64,3 +85,17 @@ bayesian:
     # "spam"   = Newsletter → Spam-Ordner
     routing: "ham"
     folder: "Newsletter"   # Ordner muss im E-Mail-Client existieren
+
+# --------------------------------------------
+# Auto-Training
+# --------------------------------------------
+auto_training:
+  enabled: true
+
+  # Maximale Anzahl automatisch gesammelter Spam-Samples (älteste werden gelöscht)
+  # Manuelle Samples in data/training/spam/ bleiben unangetastet
+  max_spam_samples: 500
+
+  # Re-Training nach X neuen Samples (passiert am Ende des Filter-Laufs)
+  # false = Samples werden gesammelt, aber kein automatisches Re-Training
+  retrain_every: 50

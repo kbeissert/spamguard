@@ -23,7 +23,7 @@ LLM_INFERENCE_TIMEOUT = 120  # seconds
 LLM_WARMUP_TIMEOUT = 60  # seconds
 
 # Token generation parameters
-LLM_NUM_PREDICT_FAST = 150  # Fast inference mode
+LLM_NUM_PREDICT_FAST = 80   # Fast inference mode (3-Zeilen-Format braucht ~50 Tokens)
 LLM_NUM_PREDICT_THINKING = 2000  # Extended thinking mode
 
 # Ollama availability check timeout
@@ -83,8 +83,8 @@ LLM_TEMPERATURE = 0.1  # Range: 0.0 (deterministic) to 1.0 (random)
 # Minimum length for a valid LLM response (shorter = empty/error, treat as HAM)
 LLM_MIN_RESPONSE_LENGTH = 3
 
-# Verdict labels that map to is_spam=True (all non-HAM categories)
-SPAM_VERDICT_LABELS = frozenset(["SPAM", "PHISHING", "COMMERCIAL"])
+# Verdict labels that map to is_spam=True (nur echte Bedrohungen; COMMERCIAL wird separat geroutet)
+SPAM_VERDICT_LABELS = frozenset(["SPAM", "PHISHING"])
 
 # Suspicious TLDs predominantly used by spammers
 SUSPICIOUS_TLDS = frozenset([

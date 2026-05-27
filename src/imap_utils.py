@@ -101,6 +101,41 @@ def imap_connection(account: Dict[str, str], select_folder: Optional[str] = "INB
                 logging.error(f"Cleanup error: {cleanup_error}", exc_info=True)
 
 
+def ensure_folder_exists(mail: imaplib.IMAP4_SSL, folder_name: str) -> bool:
+    """
+    Ensures a folder exists on the IMAP server, creating it if necessary.
+
+    Handles IMAP namespace prefixes: tries the folder name directly first,
+    then falls back to INBOX.<folder_name> (common on kasserver.com and others).
+
+    Returns True if the folder was created, False if it already existed.
+    """
+    status, _ = mail.status(folder_name, "(MESSAGES)")
+    if status == "OK":
+        return False
+
+    inbox_path = f"INBOX.{folder_name}"
+    status, _ = mail.status(inbox_path, "(MESSAGES)")
+    if status == "OK":
+        logging.debug(f"Ordner existiert als '{inbox_path}' (INBOX-Namespace)")
+        return False
+
+    status, _ = mail.create(folder_name)
+    if status == "OK":
+        logging.info(f"IMAP-Ordner erstellt: {folder_name}")
+        print(f"   📁 Ordner '{folder_name}' wurde automatisch angelegt")
+        return True
+
+    status, _ = mail.create(inbox_path)
+    if status == "OK":
+        logging.info(f"IMAP-Ordner erstellt: {inbox_path}")
+        print(f"   📁 Ordner '{inbox_path}' wurde automatisch angelegt")
+        return True
+
+    logging.warning(f"Ordner '{folder_name}' konnte nicht erstellt werden (auch nicht als '{inbox_path}')")
+    return False
+
+
 def safe_connect_imap(account: Dict[str, str]) -> imaplib.IMAP4_SSL:
     """
     Simple IMAP connection without folder selection (legacy support).

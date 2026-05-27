@@ -14,8 +14,9 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from ipaddress import ip_address as parse_ip, ip_network, IPv4Network, IPv6Network
 from pathlib import Path
-from typing import Set, List, Tuple, Optional, Dict
+from typing import List, Set, Tuple, Optional, Dict, Union
 
 import requests
 import yaml
@@ -36,8 +37,8 @@ LISTS_DIR = PROJECT_ROOT / "data" / "lists"  # User White-/Blacklists
 CACHE_DIR = PROJECT_ROOT / "data" / "lists" / "external"  # Externe Listen Cache
 
 # Pfad zur Blacklist-Provider Konfiguration
-BLACKLIST_SOURCES_FILE = LISTS_DIR / "blacklist_sources.yaml"
-BLACKLIST_SOURCES_EXAMPLE = LISTS_DIR / "blacklist_sources.yaml.example"
+BLACKLIST_SOURCES_FILE = PROJECT_ROOT / "config" / "blacklists.yaml"
+BLACKLIST_SOURCES_EXAMPLE = PROJECT_ROOT / "config" / "blacklists.yaml.example"
 
 
 def _validate_source_config(source_name: str, config: Dict) -> bool:
@@ -242,11 +243,12 @@ LOCAL_BLACKLIST_PATH = "data/lists/blacklist.txt"
 
 @dataclass
 class _ListData:
-    """Groups the three sets that make up one list (email, domain, IP)."""
+    """Groups the sets that make up one list (email, domain, IP, CIDR)."""
 
     emails: Set[str] = field(default_factory=set)
     domains: Set[str] = field(default_factory=set)
     ips: Set[str] = field(default_factory=set)
+    cidr_networks: List[Union[IPv4Network, IPv6Network]] = field(default_factory=list)
 
 
 class ListManager:
@@ -555,14 +557,14 @@ class ListManager:
         elif list_type == "email":
             self.blacklist.emails.update(entry.lower() for entry in entries)
         elif list_type == "ip_cidr":
-            # Für CIDR-Blöcke extrahieren wir IPs (vereinfacht)
             for entry in entries:
-                # Extrahiere IP aus CIDR-Notation (z.B. "192.168.1.0/24")
-                if "/" in entry:
-                    ip = entry.split("/")[0]
-                    self.blacklist.ips.add(ip)
-                else:
-                    self.blacklist.ips.add(entry)
+                try:
+                    if "/" in entry:
+                        self.blacklist.cidr_networks.append(ip_network(entry, strict=False))
+                    else:
+                        self.blacklist.ips.add(entry)
+                except ValueError:
+                    pass
 
     def _parse_list_file(self, file_path: Path) -> List[str]:
         """
@@ -579,8 +581,8 @@ class ListManager:
             entries = []
 
             for raw_line in content.splitlines():
-                # Entferne Kommentare und Whitespace
-                line = raw_line.split("#")[0].strip()
+                # Entferne Kommentare (# und ;) und Whitespace
+                line = raw_line.split("#")[0].split(";")[0].strip()
                 if line:
                     entries.append(line)
 
@@ -652,24 +654,33 @@ class ListManager:
         # 3. Nicht in Listen gefunden
         return False, None
 
-    def check_ip(self, ip_address: str) -> Tuple[bool, Optional[str]]:
+    def check_ip(self, sender_ip: str) -> Tuple[bool, Optional[str]]:
         """
-        Prüft IP-Adresse gegen Blacklist.
+        Prüft IP-Adresse gegen Blacklist (einzelne IPs und CIDR-Netzwerke).
 
         Args:
-            ip_address: Zu prüfende IP-Adresse
+            sender_ip: Zu prüfende IP-Adresse
 
         Returns:
             Tuple[bool, Optional[str]]: (is_spam, reason)
         """
-        if not ip_address:
+        if not sender_ip:
             return False, None
 
-        ip_clean = ip_address.strip()
+        ip_str = sender_ip.strip()
 
-        if ip_clean in self.blacklist.ips:
-            logging.info(f"🚫 IP auf Blacklist: {ip_address}")
-            return True, f"Blacklist IP: {ip_address}"
+        if ip_str in self.blacklist.ips:
+            logging.info(f"🚫 IP auf Blacklist: {sender_ip}")
+            return True, f"Blacklist IP: {sender_ip}"
+
+        try:
+            addr = parse_ip(ip_str)
+            for network in self.blacklist.cidr_networks:
+                if addr in network:
+                    logging.info(f"🚫 IP in CIDR-Block: {sender_ip} ({network})")
+                    return True, f"Blacklist CIDR: {sender_ip} ({network})"
+        except ValueError:
+            pass
 
         return False, None
 

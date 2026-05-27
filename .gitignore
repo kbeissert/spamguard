@@ -10,18 +10,26 @@ config/accounts.yaml
 !config/accounts.yaml.example
 config/settings.yaml
 !config/settings.yaml.example
+config/blacklists.yaml
+!config/blacklists.yaml.example
 
 # User-spezifische Listen (persönliche Daten!)
 data/lists/whitelist.txt
 data/lists/blacklist.txt
-data/lists/blacklist_sources.yaml
 !data/lists/whitelist.txt.example
 !data/lists/blacklist.txt.example
-!data/lists/blacklist_sources.yaml.example
 
 # Externe Listen Cache
 data/lists/external/
 !data/lists/external/.gitkeep
+
+# Trainings-Daten & Modelle (lokal, nicht im Repo)
+data/training/
+data/models/
+data/lists/blacklist_sources.yaml
+
+# Build-Artefakte
+*.egg-info/
 
 # Python Runtime
 __pycache__/

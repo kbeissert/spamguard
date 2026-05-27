@@ -4,7 +4,7 @@
 
 > IMAP-basierter Spam-Filter mit Bayesian Pre-Filter + optionalem LLM via Ollama für maximale Genauigkeit.
 
-**Version 0.3.0** – Konsolidierte Konfiguration + Bayesian-Verbesserungen
+**Version 0.4.0** – Auto-Training, Newsletter-IMAP-Ordner, Logging-Fix
 
 ## Features
 
@@ -14,6 +14,7 @@
 - ✅ **7-Stufen-Filter**: Whitelist → Blacklist → TLD-Check → SPF/DKIM → DNSBL → Bayesian → LLM
 - ✅ **Bayesian Pre-Filter**: 70-80% der Mails werden in 10ms klassifiziert (ohne LLM)
 - 🆕 **Newsletter-Erkennung**: Optionaler 3-Klassen-Modus (HAM/SPAM/NEWSLETTER) mit flexiblem Routing
+- 🆕 **Auto-Training**: Erkannte Spam-Mails werden automatisch als Trainingssamples gespeichert — das Modell lernt kontinuierlich
 - ✅ **Externe Blacklists**: Automatisches Laden von Spamhaus, Blocklist.de etc.
 - ✅ **IMAP-Support**: All-Inkl, Gmail, GMX, Outlook, HostEurope, Berlin.de, etc.
 - ✅ **LLM-basiert**: Unterstützt `gemma3:12b`, `gemma4:e4b`, `ministral3:14b` mit 4-Kategorien-Klassifikation
@@ -50,11 +51,11 @@ cp .env.example .env
 # Config-Dateien anlegen
 cp config/accounts.yaml.example config/accounts.yaml
 cp config/settings.yaml.example config/settings.yaml
+cp config/blacklists.yaml.example config/blacklists.yaml
 
 # Whitelist/Blacklist anlegen
 cp data/lists/whitelist.txt.example data/lists/whitelist.txt
 cp data/lists/blacklist.txt.example data/lists/blacklist.txt
-cp data/lists/blacklist_sources.yaml.example data/lists/blacklist_sources.yaml
 ```
 
 ### 3. Accounts konfigurieren
@@ -121,6 +122,7 @@ ollama pull ministral3:14b
 **Mit Makefile (empfohlen):**
 ```bash
 make start              # Spam-Filter starten
+make load-blacklists    # Externe Blacklists herunterladen
 make spam <adresse>     # Als Spam markieren (Blacklist)
 make unspam <adresse>   # Kein Spam (Whitelist + Wiederherstellen → Posteingang)
 make unspam-newsletter <adresse>  # Newsletter aus Spam → Newsletter-Ordner
@@ -226,7 +228,7 @@ mkdir -p data/training/newsletter
 # 2. Training (erkennt automatisch 3-Klassen-Modus)
 make train
 
-# 3. Konfiguriere Routing in config/bayesian.yaml:
+# 3. Konfiguriere Routing in config/settings.yaml:
 newsletter:
   routing: "folder"      # "ham", "spam", oder "folder"
   folder: "Newsletter"   # Ziel-Ordner
@@ -441,15 +443,16 @@ spam@badsite.com
 known-spammer.xyz
 ```
 
-**Externe Blacklists** werden automatisch geladen:
-- Spamhaus DROP (IP-basiert)
-- Blocklist.de (IP-basiert)
+**Externe Blacklists** werden über `config/blacklists.yaml` konfiguriert und mit `make load-blacklists` heruntergeladen. Standard aktiv:
+- Spamhaus DROP + EDROP (IP-CIDR)
+- Blocklist.de, Feodo Tracker (einzelne IPs)
+- Phishing Army, CERT Poland, Firebog, Abuse.ch URLhaus (Domains)
 
-💡 **Update-Intervall**: Standard 24h, konfigurierbar via `LIST_UPDATE_INTERVAL`
+💡 **Alle aktivierten IP-CIDR-Blöcke werden korrekt als Netzwerke ausgewertet** (keine primitiven String-Matches mehr).
 
 ## Spam-Filter Logik
 
-Das System verwendet einen **6-Stufen-Ansatz**:
+Das System verwendet einen **7-Stufen-Ansatz**. Die Whitelist steht bewusst an erster Stelle, damit vertrauenswürdige Absender niemals durch nachfolgende Stufen — auch nicht durch DNSBL oder Bayesian — fälschlich als Spam blockiert werden können:
 
 ```
 1. WHITELIST      → E-Mail IMMER als HAM (kein Spam)
@@ -460,12 +463,16 @@ Das System verwendet einen **6-Stufen-Ansatz**:
    ↓ kein Treffer
 4. SPF/DKIM-AUTH  → Doppelter Auth-Fail → SPAM; einzelner Fail → Hinweis für LLM
    ↓ kein hard fail
-5. DNSBL-LOOKUP   → IP in externer Blacklist → SPAM
+5. DNSBL-LOOKUP   → Sender-IP in DNS-Blackliste → SPAM
    ↓ kein Treffer
-6. LLM-ANALYSE    → Intelligente Bewertung: SPAM / PHISHING / COMMERCIAL / HAM
+5b. IP-BLACKLIST  → Sender-IP in lokalem CIDR-Block (config/blacklists.yaml) → SPAM
+   ↓ kein Treffer
+6. BAYESIAN       → TF-IDF + Naive Bayes: SPAM/HAM/NEWSLETTER
+   ↓ unsicher (0.3-0.5)
+7. LLM-ANALYSE    → Intelligente Bewertung: SPAM / PHISHING / COMMERCIAL / HAM
 ```
 
-**Priorität**: Whitelist > Blacklist > TLD > SPF/DKIM > DNSBL > LLM
+**Priorität**: Whitelist > Blacklist > TLD > SPF/DKIM > DNSBL > IP-Blacklist > Bayesian > LLM
 
 📖 Details: [CONFIGURATION.md - Blacklist/Whitelist-System](docs/CONFIGURATION.md#blacklistwhitelist-system)
 
@@ -508,8 +515,11 @@ filter:
 
 - 📖 **[SETUP.md](docs/SETUP.md)** - Vollständige Setup-Anleitung mit Modellübersicht
 - 🔧 **[CONFIGURATION.md](docs/CONFIGURATION.md)** - Detaillierte Konfigurationsoptionen
+- 🤖 **[LLM.md](docs/LLM.md)** - LLM-Integration: Betriebsmodi, System-Prompt, Bayesian-Übergabe
+- 📚 **[AUTO_TRAINING.md](docs/AUTO_TRAINING.md)** - Auto-Training: Selbstlernender Filter, Cap-Strategie, Dedup
 - 🌐 **[BLACKLIST_SOURCES.md](docs/BLACKLIST_SOURCES.md)** - Externe Blacklist-Quellen & eigene Listen hinzufügen
 - ♻️ **[UNSPAM.md](docs/UNSPAM.md)** - Spam-Wiederherstellung: E-Mails aus Spam-Ordner zurückholen
+- 🔍 **[AUDIT.md](docs/AUDIT.md)** - Listen-Audit: Whitelist/Blacklist interaktiv durchsuchen und bereinigen
 - ⚠️ **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Problemlösungen & häufige Fehler
 
 ## Systemanforderungen

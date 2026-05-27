@@ -172,3 +172,22 @@ NEWSLETTER_FOLDER = NEWSLETTER_CONFIG.get("folder", "Newsletter")
 
 # Erzwinge Listen-Update beim Start (ignoriert Cache)
 FORCE_LIST_UPDATE = os.getenv("FORCE_LIST_UPDATE", "false").lower() == "true"
+
+# ============================================
+# LLM Force Mode Settings (Diagnose & Debugging)
+# ============================================
+
+_diag_cfg = SETTINGS.get("llm_diagnostics", {})
+# true = LLM läuft für jede Mail (Bayesian-Early-Exit wird übersprungen) — nur für Tests
+LLM_FORCE: bool = _diag_cfg.get("force", False)
+# true = Bayesian-Score wird in den LLM-User-Prompt eingefügt (nur relevant wenn force: true)
+LLM_USE_BAYESIAN_SCORE: bool = _diag_cfg.get("use_bayesian_score", True)
+
+# ============================================
+# Auto-Training Settings
+# ============================================
+
+_auto_train_cfg = SETTINGS.get("auto_training", {})
+AUTO_TRAINING_ENABLED: bool = _auto_train_cfg.get("enabled", True)
+AUTO_TRAINING_MAX_SAMPLES: int = int(_auto_train_cfg.get("max_spam_samples", 500))
+AUTO_TRAINING_RETRAIN_EVERY: int = int(_auto_train_cfg.get("retrain_every", 50))

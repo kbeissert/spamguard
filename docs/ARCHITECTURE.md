@@ -5,7 +5,7 @@
 **Inhalt:**
 
 - Layer-basierte Architektur (Config → Infrastructure → Pipeline → Tools)
-- 5-stufige Filter-Pipeline
+- 7-stufige Filter-Pipeline
 - Konfigurations-System (YAML-first)
 - Bekannte technische Schulden
 
@@ -20,7 +20,7 @@
 Das gesamte SpamGuard-Projekt folgt einer unumstößlichen Prämisse: der strikten Trennung der reinen Spam-Erkennung (Detection) von nachgelagerten Verwaltungswerkzeugen (Management).
 
 1. **Detection (Core Filter Loop):**
-   Der Kern der Filter-Pipeline (`spam_filter.py`) ist kompromisslos sequentiell, ausfallsicher (`try...finally`) und minimalistisch. Sein **einziges** Ziel: E-Mails der 5-stufigen Pipeline zuführen, das Ergebnis loggen und Spam in den konfigurierten Ordner verschieben. Keine Management-Abhängigkeiten gefährden diesen Prozess.
+   Der Kern der Filter-Pipeline (`spam_filter.py`) ist kompromisslos sequentiell, ausfallsicher (`try...finally`) und minimalistisch. Sein **einziges** Ziel: E-Mails der 7-stufigen Pipeline zuführen, das Ergebnis loggen und Spam in den konfigurierten Ordner verschieben. Keine Management-Abhängigkeiten gefährden diesen Prozess.
 
 2. **Management (Downstream-Tools):**
    Verwaltungswerkzeuge – `unspam.py`, `manage_lists.py`, `undo_restore.py` – sind vollständig vom Filter-Core entkoppelt. Sie laufen als eigenständige Prozesse und dürfen den Filter-Loop niemals direkt aufrufen, verändern oder durch Seiteneffekte beeinflussen.
@@ -35,14 +35,15 @@ Jede logische Funktion hat **genau einen festen Platz** in einem spezifischen Mo
 | Verantwortlichkeit | SSOT-Modul |
 |---|---|
 | E-Mail-Account-Konfiguration | `config/accounts.yaml` |
-| LLM-Konfiguration (Modell, URL, Timeouts) | `config/ollama.yaml` |
+| LLM-Konfiguration (Modell, URL, Timeouts) | `config/settings.yaml` |
 | LLM System-Prompt | `config/system_prompt.txt` |
 | Alle numerischen Schwellenwerte & Konstanten | `src/constants.py` |
-| Externe Blacklist-Provider-Konfiguration | `data/lists/blacklist_sources.yaml` |
+| Externe Blacklist-Provider-Konfiguration | `config/blacklists.yaml` |
 | Alle Ollama-HTTP-Zugriffe | `src/ollama_client.py` |
 | IMAP-Verbindungsaufbau & -Cleanup | `src/imap_utils.py` |
 | Whitelist/Blacklist-Logik | `src/list_manager.py` |
 | E-Mail-Parsing-Hilfsfunktionen | `src/utils.py` |
+| Auto-Training (Dedup, Cap, Retrain-Trigger) | `src/spam_trainer.py` |
 
 ### 🛑 Dritte Regel: Configuration-Driven & No Magic Numbers
 
@@ -70,9 +71,9 @@ if len(response) < LLM_MIN_RESPONSE_LENGTH:
 ┌──────────────────────────────────────────────────────┐
 │ Layer 1: Konfiguration                               │
 │ - config/accounts.yaml   (IMAP-Accounts)             │
-│ - config/ollama.yaml     (LLM: Modell, URL, Timeouts)│
+│ - config/settings.yaml   (LLM, Bayesian, Filter)     │
 │ - config/system_prompt.txt (LLM System-Prompt)       │
-│ - blacklist_sources.yaml (Externe Listen-Provider)   │
+│ - config/blacklists.yaml (Externe Listen-Provider)   │
 │ - src/constants.py       (Schwellenwerte & Limits)   │
 │ - src/config.py          (YAML-Loader)               │
 └──────────────────────────────────────────────────────┘
@@ -93,7 +94,9 @@ if len(response) < LLM_MIN_RESPONSE_LENGTH:
 │   Stufe 2.5: TLD-Check       → SPAM bei .xyz/.top/…  │
 │   Stufe 3: SPF/DKIM-Auth     → SPAM bei doppel-fail  │
 │   Stufe 4: DNSBL-Lookup      → SPAM bei IP-Treffer   │
-│   Stufe 5: LLM-Analyse       → finale Entscheidung   │
+│   Stufe 4b: IP-Blacklist     → SPAM via CIDR-Blöcke  │
+│   Stufe 5: Bayesian Filter   → HAM/SPAM/NEWSLETTER   │
+│   Stufe 6: LLM-Analyse       → finale Entscheidung   │
 └──────────────────────────────────────────────────────┘
                          ↓
 ┌──────────────────────────────────────────────────────┐
@@ -123,9 +126,9 @@ if len(response) < LLM_MIN_RESPONSE_LENGTH:
 | Datei | Zweck | Vorlage |
 |---|---|---|
 | `config/accounts.yaml` | IMAP-Accounts (Server, Login, Spam-Ordner) | `config/accounts.yaml.example` |
-| `config/ollama.yaml` | LLM-Modell, Base-URL, Timeouts, Inferenz-Parameter | — |
+| `config/settings.yaml` | LLM-Modell, Base-URL, Timeouts, Bayesian, Filter-Modi | `config/settings.yaml.example` |
 | `config/system_prompt.txt` | LLM System-Prompt (direkt editierbar) | — |
-| `data/lists/blacklist_sources.yaml` | Externe Blacklist-Provider (URL, Typ, enabled) | `blacklist_sources.yaml.example` |
+| `config/blacklists.yaml` | Externe Blacklist-Provider (URL, Typ, enabled) | `config/blacklists.yaml.example` |
 | `src/constants.py` | Alle numerischen Konstanten und Limits | — |
 
 ### `src/config.py` — der Loader
@@ -139,7 +142,7 @@ FILTER_MODE    = os.getenv("FILTER_MODE", "count")
 LIMIT          = int(os.getenv("LIMIT", "5"))
 ```
 
-Alle LLM-Parameter (früher `OLLAMA_URL`, `SPAM_MODEL`) wurden in `ollama.yaml` + `src/ollama_client.py` ausgelagert (SSOT, seit Refactoring Mai 2026).
+Alle LLM-Parameter wurden in `config/settings.yaml` (Sektion `llm:`) konsolidiert und werden von `src/ollama_client.py` gelesen (SSOT, seit Refactoring Mai 2026).
 
 ---
 
@@ -152,7 +155,7 @@ Alle HTTP-Anfragen an Ollama laufen ausschließlich über dieses Modul. Kein and
 **Öffentliche API:**
 
 ```python
-# Konfigurationswerte (aus ollama.yaml)
+# Konfigurationswerte (aus config/settings.yaml, Sektion llm:)
 ollama_client.MODEL          # z.B. "gemma3:12b"
 ollama_client.BASE_URL       # z.B. "http://localhost:11434"
 ollama_client.GENERATE_URL   # BASE_URL + "/api/generate"
@@ -191,9 +194,9 @@ Priorität: **Whitelist > Blacklist > LLM**. Der Manager gibt `(is_spam, reason)
 
 ## Layer 3: Filter-Pipeline
 
-### 6-Stufen-Architektur
+### 7-Stufen-Architektur
 
-Die Pipeline ist sequentiell und early-exit: Sobald eine Stufe ein eindeutiges Ergebnis liefert, werden alle nachfolgenden Stufen übersprungen. Die LLM-Analyse (Stufe 5) ist die teuerste Operation und wird nur als letztes Mittel eingesetzt.
+Die Pipeline ist sequentiell und early-exit: Sobald eine Stufe ein eindeutiges Ergebnis liefert, werden alle nachfolgenden Stufen übersprungen. Die Whitelist steht bewusst an erster Stelle, damit vertrauenswürdige Absender niemals durch nachfolgende Stufen — auch nicht durch DNSBL oder Bayesian — fälschlich als Spam blockiert werden können. Bayesian (Stufe 5) klassifiziert 70-80% der Mails ohne LLM. Die LLM-Analyse (Stufe 6) ist die teuerste Operation und wird nur als letztes Mittel eingesetzt.
 
 ```text
 E-Mail eingehend
@@ -225,7 +228,7 @@ E-Mail eingehend
 │ Stufe 3          │  SPF fail UND DKIM fail?
 │ Auth-Check       │──────────────────────── → SPAM
 │ (SPF + DKIM)     │  SPF fail ODER DKIM fail → AUTH-STATUS
-└──────────────────┘         │ (wird Stufe 5 als separates Feld übergeben)
+└──────────────────┘         │ (wird Stufe 6 als separates Feld übergeben)
        │ kein hard fail
        ▼
 ┌──────────────────┐
@@ -235,7 +238,24 @@ E-Mail eingehend
        │ kein Treffer
        ▼
 ┌──────────────────┐
-│ Stufe 5          │  LLM-Analyse (4 Kategorien)
+│ Stufe 4b         │  IP in lokalem CIDR-Block?
+│ IP-Blacklist     │──────────────────────── → SPAM
+│ (config/         │  (Spamhaus DROP/EDROP,
+│  blacklists.yaml)│   Blocklist.de, Feodo …)
+└──────────────────┘
+       │ kein Treffer
+       ▼
+┌──────────────────┐
+│ Stufe 5          │  Bayesian TF-IDF Score?
+│ Bayesian Filter  │── Score < 0.3 ──────── → HAM (10ms, kein LLM)
+│ (trainiert auf   │── Score > 0.5 ──────── → SPAM (10ms, kein LLM)
+│  eigenen Mails)  │── Score 0.3–0.5 ──────── → UNSICHER (→ Stufe 6)
+│                  │── NEWSLETTER ──────────── → Newsletter-Routing
+└──────────────────┘
+       │ nur bei Unsicherheit (oder LLM-Fallback aktiv)
+       ▼
+┌──────────────────┐
+│ Stufe 6          │  LLM-Analyse (4 Kategorien)
 │ LLM-Analyse      │──────────────────────── → SPAM / PHISHING / COMMERCIAL / HAM
 │ (Ollama /api/chat)
 └──────────────────┘
@@ -319,20 +339,24 @@ logging.error(f"IMAP-Fehler: {e}", exc_info=True)
 
 ## Design-Patterns
 
-### 1. Pipeline-Pattern (6-stufige Filterung)
+### 1. Pipeline-Pattern (7-stufige Filterung)
 
 ```python
 # Jede Stufe gibt None (weiter) oder (is_spam, reason) (abbrechen) zurück
 def detect_spam(sender, subject, body, list_manager, msg) -> Tuple[bool, str]:
     if result := _check_whitelist_blacklist(sender, list_manager):
-        return result                   # Stufe 1 + 2: hard filter
+        return result                        # Stufe 1 + 2: hard filter
     if result := _check_suspicious_sender(sender):
-        return result                   # Stufe 2.5: TLD-Check
+        return result                        # Stufe 2.5: TLD-Check
     if result := _check_auth(msg):
-        return result                   # Stufe 3: SPF/DKIM
+        return result                        # Stufe 3: SPF/DKIM
     if result := _check_dnsbl(msg):
-        return result                   # Stufe 4: DNSBL
-    return ollama_client.query_spam(...)  # Stufe 5: LLM (4 Kategorien)
+        return result                        # Stufe 4: DNSBL
+    if result := _check_local_ip_blacklist(msg, list_manager):
+        return result                        # Stufe 4b: lokale CIDR-Blacklists
+    if result := _check_bayesian(subject, body, list_manager):
+        return result                        # Stufe 5: Bayesian (70-80% aller Mails)
+    return ollama_client.query_spam(...)     # Stufe 6: LLM (nur schwierige Fälle)
 ```
 
 ### 2. Context Manager Pattern (IMAP-Verbindungen)

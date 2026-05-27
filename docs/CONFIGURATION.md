@@ -59,7 +59,9 @@ llm:
     availability: 3
   inference:
     temperature: 0.1
-    num_predict: 150
+    num_predict: 80
+  force: false            # true = LLM für jede Mail (Bayesian wird übersprungen)
+  use_bayesian_score: true  # Bayesian-Score in LLM-Prompt einfügen (wenn force: true)
 
 # Bayesian Filter
 bayesian:
@@ -94,10 +96,16 @@ bayesian:
 
 #### LLM-Abschnitt (`llm:`)
 
+👉 **Ausführliche Dokumentation:** [LLM.md](LLM.md) — Betriebsmodi, System-Prompt anpassen, Bayesian-Score-Übergabe, technische Details
+
 | Parameter | Beschreibung | Standard |
 |-----------|--------------|----------|
-| `enabled: false` | **LLM-freier Modus**<br>• Keine Ollama-Installation nötig<br>• ~88-90% Genauigkeit (nur Bayesian)<br>• Schnell: ~10ms pro Mail | ✅ Empfohlen für Einsteiger |
-| `enabled: true` | **LLM-Modus**<br>• Erfordert Ollama + Modell<br>• ~94-96% Genauigkeit<br>• ~1-3s pro Mail | Für maximale Präzision |
+| `enabled` | `false` = kein Ollama nötig; `true` = Ollama erforderlich | `false` |
+| `force` | `true` = LLM bewertet jede Mail, Bayesian nur als Hint | `false` |
+| `use_bayesian_score` | Bayesian-Score in LLM-Prompt einfügen (nur wenn `force: true`) | `true` |
+| `model` | Ollama-Modellname | `gemma3:12b` |
+| `inference.temperature` | 0.0 = deterministisch, 1.0 = kreativ | `0.1` |
+| `inference.num_predict` | Max. generierte Token (3-Zeilen-Format braucht ~50) | `80` |
 
 **Verfügbare Modelle** (wenn `enabled: true`):
 
@@ -106,6 +114,66 @@ bayesian:
 | `gemma4:e4b` | ~4GB | Schwache Systeme (≤8GB) |
 | `gemma3:12b` | ~8GB | Mittlere Systeme (8–16GB) |
 | `ministral3:14b` | ~9GB | Starke Systeme (16GB+) |
+
+---
+
+#### LLM-Betriebsmodi
+
+Es gibt drei sinnvolle Kombinationen aus Bayesian und LLM. Modus D (`force: true` + `llm_fallback: true`) ist technisch möglich, verhält sich aber identisch zu Modus B, da `force` den `llm_fallback` überlagert.
+
+---
+
+**Modus A — Nur Bayesian** *(schnell, kein Ollama nötig)*
+
+```yaml
+llm:
+  enabled: false
+
+bayesian:
+  llm_fallback: false   # oder true – hat keinen Effekt ohne llm.enabled
+```
+
+- Bayesian entscheidet alle Fälle selbst
+- Unsichere Mails (0.3–0.5) → HAM (sicherer Default)
+- ⚠️ Wenn `llm_fallback: true` gesetzt, aber `llm.enabled: false` → Startup-Warnung, Verhalten wie `false`
+- Durchsatz: ~50–60 Mails/Minute, ~88–90% Genauigkeit
+
+---
+
+**Modus B — LLM für alle Mails** *(gründlich, Ollama erforderlich)*
+
+```yaml
+llm:
+  enabled: true
+  force: true
+  use_bayesian_score: true   # Bayesian-Score als Kontext-Hint in den Prompt
+
+bayesian:
+  llm_fallback: false   # irrelevant wenn force: true
+```
+
+- Bayesian-Early-Exit wird übersprungen — LLM bewertet jede Mail nach den deterministischen Stufen (Whitelist/Blacklist/TLD/SPF/DNSBL)
+- Wenn `use_bayesian_score: true`: LLM-Prompt enthält zusätzlich `BAYESIAN-SCORE: 0.42 (UNSICHER)` als Kontext
+- Der `config/system_prompt.txt` bleibt davon unberührt und kann frei bearbeitet werden
+- Durchsatz: ~15–25 Mails/Minute, ~94–96% Genauigkeit
+
+---
+
+**Modus C — Bayesian mit LLM-Fallback** *(ausgewogen, empfohlen)*
+
+```yaml
+llm:
+  enabled: true
+  force: false
+
+bayesian:
+  llm_fallback: true
+```
+
+- Bayesian entscheidet sichere Fälle (Score < 0.3 → HAM, Score > 0.5 → SPAM)
+- Unsichere Fälle (0.3–0.5) → LLM für finale Entscheidung
+- ⚠️ Beide Schalter müssen aktiv sein: `llm.enabled: true` **und** `bayesian.llm_fallback: true`
+- Durchsatz: ~35–45 Mails/Minute, ~92–95% Genauigkeit
 
 ---
 
@@ -159,15 +227,15 @@ bayesian:
 
 #### LLM-Fallback-Strategien
 
-**Strategie 1: Geschwindigkeit (empfohlen)**
-- `llm_fallback: false`
-- Unsichere Mails → HAM (vermeidet False Positives)
-- Durchsatz: ~50-60 Mails/Minute
+Für die Wahl des richtigen Modus siehe [LLM-Betriebsmodi](#llm-betriebsmodi) weiter oben.
 
-**Strategie 2: Genauigkeit**
-- `llm_fallback: true`
-- Unsichere Mails → LLM
-- Durchsatz: ~35-40 Mails/Minute
+**Kurzübersicht:**
+
+| Ziel | Modus | Durchsatz |
+|------|-------|-----------|
+| Maximale Geschwindigkeit | A (`llm.enabled: false`) | ~50–60 Mails/min |
+| Ausgewogen | C (`llm_fallback: true`) | ~35–45 Mails/min |
+| Maximale Gründlichkeit | B (`force: true`) | ~15–25 Mails/min |
 
 #### Feature-Count Optimierung
 
@@ -257,12 +325,37 @@ bayesian:
 
 ---
 
+#### Auto-Training-Abschnitt (`auto_training:`)
+
+```yaml
+auto_training:
+  enabled: true
+  max_spam_samples: 500
+  retrain_every: 50
+```
+
+| Parameter | Typ | Beschreibung |
+|---|---|---|
+| `enabled` | bool | Auto-Training aktivieren/deaktivieren |
+| `max_spam_samples` | Zahl | Max. auto-gesammelte Spam-Samples (älteste werden rotiert) |
+| `retrain_every` | Zahl | Re-Training nach X neuen Samples im selben Lauf |
+
+**Funktionsweise:**
+
+Jede Mail die als SPAM in den Spam-Ordner verschoben wird, wird automatisch als `.eml`-Datei in `data/training/spam/` gespeichert. Deduplizierung verhindert, dass identische Spam-Kampagnen das Trainingsset dominieren. Am Ende des Filter-Laufs wird automatisch re-trainiert sobald `retrain_every` neue Samples gesammelt wurden.
+
+Nur `auto_*.eml`-Dateien werden rotiert — manuell hinzugefügte `.eml`-Dateien bleiben immer erhalten.
+
+👉 **[Ausführliche Dokumentation: AUTO_TRAINING.md](AUTO_TRAINING.md)**
+
+---
+
 ### 3. `.env` - Pfade und Listen-Einstellungen
 **Zweck**: Pfade, Listen-Konfiguration und sonstige globale Einstellungen  
 **Format**: Key=Value  
 **Versionierung**: ❌ NICHT in Git
 
-> **Hinweis**: Filter-Modus (`FILTER_MODE`, `LIMIT`, `DAYS_BACK`) ist jetzt in `config/filter.yaml`. LLM-Konfiguration ist in `config/ollama.yaml`. Der System-Prompt ist in `config/system_prompt.txt`.
+> **Hinweis**: Filter-Modus (`mode`, `days_back`, `limit`) und LLM-Konfiguration sind jetzt in `config/settings.yaml` konsolidiert. Der System-Prompt ist in `config/system_prompt.txt`.
 
 **Beispiel**:
 ```bash
@@ -534,7 +627,7 @@ cp .env.example .env
         Script lädt Config
                  ↓
 ┌─────────────────────────────────────┐
-│          config/filter.yaml         │
+│          config/settings.yaml       │
 │  • mode = days                      │ ← Gilt für ALLE Accounts
 │  • days_back = 30                   │
 └─────────────────────────────────────┘
@@ -557,7 +650,7 @@ accounts:
     enabled: true
 ```
 
-**config/filter.yaml**:
+**config/settings.yaml** (filter-Sektion):
 ```yaml
 filter:
   mode: "count"
@@ -581,7 +674,7 @@ accounts:
     enabled: true
 ```
 
-**config/filter.yaml**:
+**config/settings.yaml** (filter-Sektion):
 ```yaml
 filter:
   mode: "days"

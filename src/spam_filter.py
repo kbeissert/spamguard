@@ -8,6 +8,7 @@ Spam Guard - IMAP Spam Filter mit Bayesian Pre-Filter + LLM
 2.5. TLD-Check (verdächtige Sender-Domain) → Spam
 3. E-Mail-Authentifizierung (SPF/DKIM fail) → Spam
 4. DNSBL-Echtzeit-Lookup der Sender-IP → Spam
+4b. Lokale IP-Blacklist (CIDR-Blöcke aus config/blacklists.yaml) → Spam
 4.5. Bayesian Filter (TF-IDF + MultinomialNB) → SPAM/HAM/UNSURE
 5. LLM-Analyse via Ollama (nur für Bayesian-Grenzfälle oder wenn llm_fallback=true)
 
@@ -45,6 +46,8 @@ from config import (
     FILTER_MODE,
     LIMIT,
     LOG_PATH,
+    LLM_FORCE,
+    LLM_USE_BAYESIAN_SCORE,
     NEWSLETTER_ROUTING,
     NEWSLETTER_FOLDER,
     SYSTEM_PROMPT,
@@ -53,8 +56,12 @@ from config import (
     FORCE_LIST_UPDATE,
     LISTS_CACHE_DIR,
     PROJECT_ROOT,
+    AUTO_TRAINING_ENABLED,
+    AUTO_TRAINING_MAX_SAMPLES,
+    AUTO_TRAINING_RETRAIN_EVERY,
 )
-from imap_utils import imap_connection
+from imap_utils import imap_connection, ensure_folder_exists
+from spam_trainer import SpamTrainer
 from list_manager import ListManager
 from utils import (
     decode_header_safe,
@@ -72,8 +79,10 @@ from constants import (
 )
 
 
-# Logging-Setup
+# Logging-Setup (force=True: removes StreamHandler auto-added by Python 3.12+
+# when list_manager logs during import before this line runs)
 logging.basicConfig(
+    force=True,
     filename=LOG_PATH,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -314,8 +323,29 @@ def _check_dnsbl(
     return None
 
 
+def _check_local_ip_blacklist(
+    msg: Optional[email.message.Message],
+    list_manager: Optional[ListManager],
+) -> Optional[Tuple[bool, str]]:
+    """
+    Stufe 4b: Prüft Sender-IP gegen lokale IP-Blacklists (CIDR-Blöcke + einzelne IPs).
+    """
+    if msg is None or list_manager is None:
+        return None
+
+    sender_ip = extract_sender_ip(msg)
+    if not sender_ip:
+        return None
+
+    is_blocked, reason = list_manager.check_ip(sender_ip)
+    if is_blocked:
+        return True, reason
+
+    return None
+
+
 def _build_spam_detection_prompt(
-    sender: str, subject: str, body: str, auth_info: str = ""
+    sender: str, subject: str, body: str, auth_info: str = "", bayesian_hint: Optional[str] = None
 ) -> str:
     """
     Build the LLM prompt for spam detection.
@@ -327,6 +357,7 @@ def _build_spam_detection_prompt(
         subject: Email subject (escaped)
         body: Email body preview (escaped, max EMAIL_PREVIEW_MAX_LENGTH chars)
         auth_info: Optional SPF/DKIM status string (empty if auth passed)
+        bayesian_hint: Optional Bayesian score summary (injected into user prompt)
 
     Returns:
         Formatted prompt for LLM
@@ -344,6 +375,8 @@ def _build_spam_detection_prompt(
     ]
     if auth_info:
         lines.append(f"AUTH-STATUS: {auth_info}")
+    if bayesian_hint:
+        lines.append(f"BAYESIAN-SCORE: {bayesian_hint}")
     lines += [
         "==========================================",
         "Klassifiziere diese E-Mail.",
@@ -352,10 +385,34 @@ def _build_spam_detection_prompt(
     return "\n".join(lines)
 
 
-def _query_ollama_for_spam(prompt: str) -> Tuple[bool, str]:
+def _query_ollama_for_spam(prompt: str) -> Tuple[bool, str, str, str]:
     """Delegiert Spam-Erkennung an ollama_client."""
     system_prompt = SYSTEM_PROMPT.format(date=datetime.now().strftime('%Y-%m-%d'))
     return ollama_client.query_spam(prompt, system_prompt)
+
+
+def _get_bayesian_hint(
+    sender: str,
+    subject: str,
+    body: str,
+    bayesian_filter: Optional[BayesianFilter],
+) -> Optional[str]:
+    """
+    Gibt Bayesian-Score als kompakten String zurück, zur Injection in den LLM-User-Prompt.
+    Wird nur im Force-Modus verwendet (llm.force: true + llm.use_bayesian_score: true).
+    """
+    if not BAYESIAN_ENABLED or bayesian_filter is None or not bayesian_filter.ready:
+        return None
+
+    text = extract_features(sender, subject, body)
+
+    if bayesian_filter.num_classes == 3:
+        category, probs = bayesian_filter.predict_category(text)
+        return f"{category} (SPAM={probs.get('SPAM', 0):.2f}, HAM={probs.get('HAM', 0):.2f})"
+    else:
+        score = bayesian_filter.predict_score(text)
+        label = "HAM" if score < 0.3 else "SPAM" if score > 0.5 else "UNSICHER"
+        return f"{score:.2f} ({label})"
 
 
 def _check_bayesian(
@@ -473,17 +530,38 @@ def detect_spam(
         return auth_result[0], auth_result[1], None
     if result := _check_dnsbl(msg, sender):
         return result[0], result[1], None
+    if result := _check_local_ip_blacklist(msg, list_manager):
+        return result[0], result[1], None
 
     # Stage 4.5: Bayesian Pre-Filter (schnell, probabilistisch)
-    # Returnt bereits Tuple[bool, str, Optional[str]]
-    if result := _check_bayesian(sender, subject, body, bayesian_filter):
-        return result
+    bayesian_hint = None
+    _use_llm_force = ollama_client.ENABLED and LLM_FORCE
+
+    if _use_llm_force:
+        # Force-Modus: Bayesian gibt kein finales Exit — Score nur als Hint für LLM
+        if LLM_USE_BAYESIAN_SCORE:
+            bayesian_hint = _get_bayesian_hint(sender, subject, body, bayesian_filter)
+    else:
+        # Normalmodus: Bayesian kann früh aussteigen
+        if result := _check_bayesian(sender, subject, body, bayesian_filter):
+            return result
 
     # Stage 5: LLM als Fallback (nur für Bayesian-Grenzfälle oder wenn bayesian disabled)
     if ollama_client.ENABLED:
         # LLM-Modus: Nutze Ollama für finale Klassifikation
-        prompt = _build_spam_detection_prompt(sender, subject, body, auth_info=auth_info)
-        is_spam, reason = _query_ollama_for_spam(prompt)
+        prompt = _build_spam_detection_prompt(sender, subject, body, auth_info=auth_info, bayesian_hint=bayesian_hint)
+        is_spam, reason, category, confidence = _query_ollama_for_spam(prompt)
+
+        # COMMERCIAL → Newsletter-Ordner (keine Spam-Markierung)
+        if category == "COMMERCIAL":
+            logging.info(f"LLM: COMMERCIAL → {NEWSLETTER_FOLDER} - {sender}")
+            return False, reason, NEWSLETTER_FOLDER
+
+        # Niedrige Konfidenz bei SPAM/PHISHING → als HAM behandeln (False-Positive-Schutz)
+        if is_spam and confidence == "NIEDRIG":
+            logging.info(f"LLM: {category} NIEDRIG → HAM (low confidence downgrade) - {sender}")
+            return False, f"{reason} [downgraded: low confidence]", None
+
         return is_spam, reason, None
     else:
         # LLM-freier Modus: Default zu HAM (vermeidet False Positives)
@@ -511,6 +589,7 @@ def _process_single_email(
     bayesian_filter: Optional[BayesianFilter],
     stats: Dict[str, Any],
     dry_run: bool = False,
+    spam_trainer: Optional[SpamTrainer] = None,
 ) -> None:
     """Verarbeitet eine einzelne E-Mail."""
     try:
@@ -575,6 +654,10 @@ def _process_single_email(
                     {"email": sender, "subject": subject, "reason": reason}
                 )
 
+            # Auto-Training: Spam-Sample speichern
+            if spam_trainer and not dry_run:
+                spam_trainer.add_spam(sender, subject, body_preview)
+
         elif target_folder is not None:
             # HAM, aber mit speziellem Ziel-Ordner (z.B. Newsletter)
             print(f"   📰 {reason[:100]}")
@@ -594,6 +677,9 @@ def _process_single_email(
                     logging.error(f"Newsletter-Verschiebung fehlgeschlagen: {e}")
                     print(f"   ⚠️  Verschiebung fehlgeschlagen: {e}")
                     print(f"   💡 Tipp: Erstelle Ordner '{target_folder}' in deinem E-Mail-Client")
+
+            if isinstance(stats["newsletter"], int):
+                stats["newsletter"] += 1
 
         else:
             # HAM → bleibt im Posteingang
@@ -615,7 +701,8 @@ def process_inbox(
     account: Dict[str, str],
     list_manager: Optional[ListManager] = None,
     bayesian_filter: Optional[BayesianFilter] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    spam_trainer: Optional[SpamTrainer] = None,
 ) -> Dict[str, Any]:
     """
     Hauptfunktion: Verarbeitet INBOX und filtert Spam.
@@ -627,10 +714,13 @@ def process_inbox(
     Returns:
         Dict mit Statistiken: {'spam': int, 'ham': int, 'spam_senders': list}
     """
-    stats = {"spam": 0, "ham": 0, "spam_senders": [], "error": False}
+    stats = {"spam": 0, "ham": 0, "newsletter": 0, "spam_senders": [], "error": False}
 
     try:
         with imap_connection(account, "INBOX") as mail:
+            if NEWSLETTER_ROUTING == "folder":
+                ensure_folder_exists(mail, NEWSLETTER_FOLDER)
+
             # Suche E-Mails basierend auf Filter-Modus
             if FILTER_MODE == "days":
                 since_date = datetime.now() - timedelta(days=DAYS_BACK)
@@ -661,14 +751,17 @@ def process_inbox(
             if not email_ids:
                 if FILTER_MODE == "days":
                     print(f"✅ Keine E-Mails in den letzten {DAYS_BACK} Tagen gefunden!")
+                    logging.info(f"Scan {account['name']}: 0 E-Mails (letzte {DAYS_BACK} Tage seit {date_str})")
                 else:
                     print("✅ Keine E-Mails gefunden!")
+                    logging.info(f"Scan {account['name']}: 0 E-Mails (letzte {LIMIT} per count-Modus)")
                 return stats
 
+            logging.info(f"Scan {account['name']}: {len(email_ids)} E-Mails gefunden, starte Verarbeitung")
             print(f"📧 Analysiere {len(email_ids)} E-Mail(s)...\n")
 
             for email_id in tqdm(email_ids, desc="Verarbeite E-Mails", unit="mail"):
-                _process_single_email(mail, email_id, account, list_manager, bayesian_filter, stats, dry_run=dry_run)
+                _process_single_email(mail, email_id, account, list_manager, bayesian_filter, stats, dry_run=dry_run, spam_trainer=spam_trainer)
 
     except imaplib.IMAP4.error as e:
         logging.error(f"Verbindung zu {account['name']} fehlgeschlagen: {e}")
@@ -694,7 +787,7 @@ def _check_ollama_availability() -> bool:
 
 def _print_summary(total_stats: Dict[str, Any], dry_run: bool = False) -> None:
     """Gibt die Zusammenfassung aus."""
-    total = total_stats["spam"] + total_stats["ham"]
+    total = total_stats["spam"] + total_stats["ham"] + total_stats.get("newsletter", 0)
     print("\n" + "=" * 60)
     if dry_run:
         print("📊 Gesamtzusammenfassung [DRY-RUN – keine Änderungen vorgenommen]")
@@ -711,6 +804,7 @@ def _print_summary(total_stats: Dict[str, Any], dry_run: bool = False) -> None:
     print(f"   Gesamt analysiert: {total} E-Mails")
     print(f"   ❌ Als SPAM erkannt: {total_stats['spam']}")
     print(f"   ✅ Als HAM erkannt: {total_stats['ham']}")
+    print(f"   📰 Als Newsletter verschoben: {total_stats.get('newsletter', 0)}")
 
     if total > 0:
         spam_rate = (total_stats["spam"] / total) * 100
@@ -791,7 +885,7 @@ def main():
                 print("      # Dann in neuem Terminal:")
                 print("      ollama pull gemma3:12b\n")
                 print("   2️⃣  LLM-freien Modus nutzen:")
-                print("      In config/ollama.yaml setzen:")
+                print("      In config/settings.yaml setzen:")
                 print("      enabled: false")
                 print("\n      LLM-freier Modus nutzt nur:")
                 print("      • Whitelist/Blacklist")
@@ -802,6 +896,10 @@ def main():
         else:
             print("⚙️  LLM-freier Modus aktiv (Ollama nicht benötigt)")
             print("   Nutze: Whitelist/Blacklist + SPF/DKIM/DNSBL + Bayesian Filter\n")
+            if BAYESIAN_LLM_FALLBACK:
+                print("   ⚠️  HINWEIS: bayesian.llm_fallback: true ist gesetzt, aber llm.enabled: false")
+                print("      → Unsichere Bayesian-Fälle werden als HAM behandelt (LLM nicht aktiv)")
+                print("      → Für LLM-Fallback: llm.enabled: true in config/settings.yaml setzen\n")
 
         # Initialisiere ListManager
         list_manager = create_list_manager()
@@ -809,7 +907,11 @@ def main():
         # Initialisiere Bayesian Filter
         bayesian_filter = create_bayesian_filter()
         if BAYESIAN_ENABLED and bayesian_filter and bayesian_filter.ready:
-            mode_label = "LLM-Fallback: Ja" if BAYESIAN_LLM_FALLBACK else "LLM-Fallback: Nein"
+            if ollama_client.ENABLED and LLM_FORCE:
+                score_label = ", Score als Hint" if LLM_USE_BAYESIAN_SCORE else ", Score ignoriert"
+                mode_label = f"Force-Modus{score_label}"
+            else:
+                mode_label = "LLM-Fallback: Ja" if BAYESIAN_LLM_FALLBACK else "LLM-Fallback: Nein"
             print(f"   🤖 Bayesian Filter: Aktiv ({mode_label})")
         elif BAYESIAN_ENABLED:
             print(f"   ⚠️  Bayesian Filter: Aktiviert aber nicht trainiert")
@@ -822,10 +924,20 @@ def main():
                 print(f"      → Filter nutzt nur deterministische Checks (Whitelist/Blacklist/SPF/DKIM)")
                 print(f"      → Empfehlung: 'make train' ausführen für Bayesian Filter")
 
+        # Initialisiere SpamTrainer (Auto-Training)
+        spam_trainer = None
+        if AUTO_TRAINING_ENABLED and not dry_run:
+            spam_trainer = SpamTrainer(
+                training_dir=PROJECT_ROOT / "data" / "training",
+                max_auto_samples=AUTO_TRAINING_MAX_SAMPLES,
+                retrain_every=AUTO_TRAINING_RETRAIN_EVERY,
+            )
+
         # Gesamtstatistik
         total_stats = {
             "spam": 0,
             "ham": 0,
+            "newsletter": 0,
             "accounts_processed": 0,
             "accounts_failed": 0,
             "spam_senders": [],
@@ -839,7 +951,7 @@ def main():
             print("─" * 60)
 
             # Verarbeite Account
-            stats = process_inbox(account, list_manager=list_manager, bayesian_filter=bayesian_filter, dry_run=dry_run)
+            stats = process_inbox(account, list_manager=list_manager, bayesian_filter=bayesian_filter, dry_run=dry_run, spam_trainer=spam_trainer)
 
             if stats.get("error", False):
                 total_stats["accounts_failed"] += 1
@@ -848,19 +960,34 @@ def main():
             # Aktualisiere Gesamtstatistik
             total_stats["spam"] += stats["spam"]
             total_stats["ham"] += stats["ham"]
+            total_stats["newsletter"] += stats["newsletter"]
             total_stats["accounts_processed"] += 1
             if stats.get("spam_senders"):
                 total_stats["spam_senders"].extend(stats["spam_senders"])
 
             # Account-Statistik
-            account_total = stats["spam"] + stats["ham"]
+            account_total = stats["spam"] + stats["ham"] + stats["newsletter"]
             if account_total > 0:
                 spam_rate = (stats["spam"] / account_total) * 100
+                newsletter_info = f", {stats['newsletter']} Newsletter" if stats["newsletter"] else ""
                 print(
-                    f"\n   📊 {account['name']}: {account_total} E-Mails ({stats['spam']} SPAM, {stats['ham']} HAM, {spam_rate:.1f}% Spam-Rate)"
+                    f"\n   📊 {account['name']}: {account_total} E-Mails ({stats['spam']} SPAM, {stats['ham']} HAM{newsletter_info}, {spam_rate:.1f}% Spam-Rate)"
                 )
 
         _print_summary(total_stats, dry_run=dry_run)
+
+        # Auto-Training: Retrain auslösen wenn genug neue Samples gesammelt
+        if spam_trainer and spam_trainer.samples_added() > 0:
+            added = spam_trainer.samples_added()
+            total_auto = spam_trainer.total_auto_samples()
+            if spam_trainer.needs_retrain():
+                print(f"\n📚 {added} neue Spam-Samples gesammelt ({total_auto} gesamt) — starte Re-Training...")
+                spam_trainer.trigger_retrain(PROJECT_ROOT)
+            else:
+                remaining = AUTO_TRAINING_RETRAIN_EVERY - added
+                print(f"\n📚 {added} neue Spam-Samples gesammelt ({total_auto} gesamt)")
+                print(f"   Re-Training startet automatisch nach {remaining} weiteren Samples.")
+                print(f"   Oder jetzt manuell: make train")
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Abbruch durch Benutzer")

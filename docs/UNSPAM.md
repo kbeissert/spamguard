@@ -155,7 +155,7 @@ make unspam-newsletter substack.com
 **Warum kein Whitelist-Eintrag?**  
 Newsletter sollen nicht als "vertrauenswürdig" gelten wie Geschäftsmails. Sie landen im Newsletter-Ordner, nicht im Posteingang – so bleibt der Posteingang übersichtlich.
 
-**Voraussetzung:** Der Newsletter-Ordner muss in deinem E-Mail-Client existieren (Standard: `Newsletter`). Der Ziel-Ordner ist in `config/bayesian.yaml` konfiguriert:
+**Voraussetzung:** Der Newsletter-Ordner muss in deinem E-Mail-Client existieren (Standard: `Newsletter`). Der Ziel-Ordner ist in `config/settings.yaml` konfiguriert:
 ```yaml
 bayesian:
   newsletter:
