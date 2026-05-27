@@ -67,7 +67,7 @@ Das LLM sieht im Produktivbetrieb etwa 8% aller Mails. Den Rest erledigen Bayesi
 ### 1. Repository klonen
 
 ```bash
-git clone https://github.com/kbeissert/SpamGuard.git
+git clone https://github.com/kbeissert/spamguard.git
 cd SpamGuard
 ```
 
