@@ -200,7 +200,7 @@ Richte einen wöchentlichen Check ein:
 
 ```bash
 # Crontab
-0 9 * * 1 cd /path/to/spam-guard && make unspam-dry | mail -s "Unspam Report" deine@email.de
+0 9 * * 1 cd /path/to/SpamGuard && make unspam-dry | mail -s "Unspam Report" deine@email.de
 ```
 
 ### Dokumentiere deine Whitelist
@@ -316,7 +316,7 @@ $ make unspam
 #!/bin/bash
 # daily-spam-check.sh
 
-cd /path/to/spam-guard
+cd /path/to/SpamGuard
 
 # 1. Spam-Filter ausführen
 make run
@@ -331,7 +331,7 @@ echo "Spam-Filter und Wiederherstellung abgeschlossen" | mail -s "Spam Report" a
 ### Cron-Job (täglich um 6 Uhr morgens)
 
 ```bash
-0 6 * * * /path/to/daily-spam-check.sh >> /var/log/spam-guard.log 2>&1
+0 6 * * * /path/to/daily-spam-check.sh >> /var/log/spamguard.log 2>&1
 ```
 
 ## Weitere Informationen

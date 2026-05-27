@@ -34,7 +34,7 @@ Sollte etwas wie `Python 3.10.0` anzeigen. Wenn nicht → Python installieren: h
 **Option A: Mit Git (wenn installiert)**
 ```bash
 git clone https://github.com/dein-username/spam-guard.git
-cd spam-guard
+cd SpamGuard
 ```
 
 **Option B: Ohne Git**

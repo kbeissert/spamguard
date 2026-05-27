@@ -1,5 +1,5 @@
 [project]
-name = "spam-guard"
+name = "spamguard"
 version = "0.5.0"
 description = "Local AI-powered email spam filter using Ollama LLMs and Bayesian pre-filtering"
 readme = "README.md"

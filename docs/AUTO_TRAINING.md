@@ -275,7 +275,7 @@ Das Trainings-Skript wird über den `PROJECT_ROOT`-Pfad gesucht. Wenn SpamGuard 
 
 **Lösung:** Immer aus dem Projekt-Root starten:
 ```bash
-cd /pfad/zu/spam-guard
+cd /pfad/zu/SpamGuard
 make start
 ```
 

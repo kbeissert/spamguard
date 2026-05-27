@@ -63,7 +63,7 @@ If you fork SpamGuard and create a substantially different project:
   - Example: ✅ "MyFilter (inspired by SpamGuard)"
 
 - Include an **attribution notice**
-  - Example: "This project builds on SpamGuard by Kay Beißert (https://github.com/kbeissert/spam-guard)"
+  - Example: "This project builds on SpamGuard by Kay Beißert (https://github.com/kbeissert/SpamGuard)"
 
 ---
 

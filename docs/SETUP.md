@@ -24,7 +24,7 @@ Schritt‑für‑Schritt‑Anleitung zur Ersteinrichtung des lokalen Spam‑Filt
 
 ```bash
 git clone <repository-url> spam-guard
-cd spam-guard
+cd SpamGuard
 ```
 
 Oder ZIP herunterladen und entpacken.
