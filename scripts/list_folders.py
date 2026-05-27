@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ollama Spam Guard - IMAP Ordnerstruktur anzeigen
+Spam Guard - IMAP Ordnerstruktur anzeigen
 
 Listet alle verfügbaren Ordner für konfigurierte E-Mail-Accounts auf.
 Hilfreich zum Finden des richtigen Spam-Ordner-Namens.
@@ -9,18 +9,14 @@ Hilfreich zum Finden des richtigen Spam-Ordner-Namens.
 import imaplib
 import sys
 import re
-from pathlib import Path
 from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 
 # .env laden
 load_dotenv()
 
-# Füge src/ zum Python-Path hinzu
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from config import EMAIL_ACCOUNTS  # noqa: E402
-from imap_utils import imap_connection  # noqa: E402
+from config import EMAIL_ACCOUNTS
+from imap_utils import imap_connection
 
 
 def decode_folder_name(folder_bytes: bytes) -> str:

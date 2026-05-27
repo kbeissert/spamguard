@@ -10,7 +10,7 @@ Damit der Benchmark funktioniert, benötigst du eine **lokale Installation von O
 2.  **Ollama starten:** Stelle sicher, dass der Ollama-Server läuft (meistens im Hintergrund oder via `ollama serve`).
 3.  **Modelle laden:** Du musst mindestens ein Modell heruntergeladen haben, z.B.:
     ```bash
-    ollama pull qwen2.5:14b-instruct
+    ollama pull gemma3:12b
     ```
 
 ## Dateien
@@ -40,5 +40,5 @@ make benchmark-quick
 ### 3. Experten-Modus (CLI)
 Wenn du spezifische Parameter brauchst, kannst du das Skript auch direkt aufrufen (nutze das virtuelle Environment):
 ```bash
-.venv/bin/python scripts/benchmark/spam_benchmark.py --model qwen2.5:14b-instruct
+.venv/bin/python scripts/benchmark/spam_benchmark.py --model gemma3:12b
 ```

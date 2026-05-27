@@ -6,13 +6,11 @@ Prüft alle Komponenten ohne E-Mails zu verarbeiten
 
 import imaplib
 import sys
-from pathlib import Path
 
 import requests
 
-# Füge src/ zum Python-Path hinzu
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from config import EMAIL_ACCOUNTS, SPAM_MODEL
+import ollama_client
+from config import EMAIL_ACCOUNTS
 from constants import HTTP_STATUS_OK
 
 
@@ -37,9 +35,9 @@ def test_ollama_connection():
     print_header("Test 1: Ollama-Verbindung")
 
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
+        response = requests.get(ollama_client.TAGS_URL, timeout=ollama_client.CHECK_TIMEOUT)
         if response.status_code == HTTP_STATUS_OK:
-            print_test("Ollama erreichbar", True, "http://localhost:11434")
+            print_test("Ollama erreichbar", True, ollama_client.BASE_URL)
             return True
         print_test(
             "Ollama erreichbar", False, f"Status Code: {response.status_code}"
@@ -62,10 +60,10 @@ def test_ollama_connection():
 
 def test_ollama_model():
     """Test 2: LLM-Modell verfügbar"""
-    print_header(f"Test 2: LLM-Modell '{SPAM_MODEL}'")
+    print_header(f"Test 2: LLM-Modell '{ollama_client.MODEL}'")
 
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
+        response = requests.get(ollama_client.TAGS_URL, timeout=ollama_client.CHECK_TIMEOUT)
         if response.status_code != HTTP_STATUS_OK:
             print_test("Modell-Liste abrufen", False, "Ollama antwortet nicht")
             return False
@@ -77,12 +75,12 @@ def test_ollama_model():
         # Prüfe ob Modell vorhanden (mit und ohne :latest Tag)
         model_found = False
         for model_name in model_names:
-            if SPAM_MODEL in model_name or model_name in SPAM_MODEL:
+            if ollama_client.MODEL in model_name or model_name in ollama_client.MODEL:
                 model_found = True
                 break
 
         if model_found:
-            print_test(f"Modell '{SPAM_MODEL}' verfügbar", True)
+            print_test(f"Modell '{ollama_client.MODEL}' verfügbar", True)
             print(f"\n📋 Installierte Modelle ({len(models)}):")
             max_display_models = 5
             for model in models[:max_display_models]:  # Zeige max 5
@@ -90,9 +88,9 @@ def test_ollama_model():
             if len(models) > max_display_models:
                 print(f"   ... und {len(models) - max_display_models} weitere")
             return True
-        print_test(f"Modell '{SPAM_MODEL}' verfügbar", False, "Nicht gefunden")
+        print_test(f"Modell '{ollama_client.MODEL}' verfügbar", False, "Nicht gefunden")
         print("\n💡 Lösung:")
-        print(f"   - Installiere Modell: ollama pull {SPAM_MODEL}")
+        print(f"   - Installiere Modell: ollama pull {ollama_client.MODEL}")
         print("\n📋 Verfügbare Modelle:")
         for model in models[:10]:
             print(f"   - {model['name']}")
@@ -192,7 +190,7 @@ def main():
     if results["ollama"]:
         results["model"] = test_ollama_model()
     else:
-        print_header(f"Test 2: LLM-Modell '{SPAM_MODEL}'")
+        print_header(f"Test 2: LLM-Modell '{ollama_client.MODEL}'")
         print("⏭️  Übersprungen (Ollama nicht erreichbar)")
 
     # Test 3: E-Mail-Accounts

@@ -2,7 +2,7 @@
 
 ## Dateien
 
-### 1. `accounts.yaml` - E-Mail-Accounts
+### 1. `config/accounts.yaml` - E-Mail-Accounts
 **Zweck**: Konfiguration aller E-Mail-Konten  
 **Format**: YAML  
 **Versionierung**: ❌ NICHT in Git (enthält Passwörter!)  
@@ -30,24 +30,244 @@ accounts:
 
 ---
 
-### 2. `.env` - Script-Einstellungen
-**Zweck**: Globale Konfiguration des Spam-Filters  
+### 2. `config/settings.yaml` - Alle Einstellungen
+**Zweck**: Zentrale Konfiguration für Filter, LLM und Bayesian  
+**Format**: YAML  
+**Versionierung**: ❌ NICHT in Git (persönliche Einstellungen)
+
+**Erstellen:**
+```bash
+cp config/settings.yaml.example config/settings.yaml
+```
+
+**Vollständiges Beispiel**:
+```yaml
+# Filter: Welche E-Mails werden geprüft?
+filter:
+  mode: "days"      # "count" = letzte X Mails | "days" = letzte X Tage
+  days_back: 7      # Tage zurück (bei mode: "days")
+  limit: 50         # Anzahl E-Mails (bei mode: "count")
+
+# LLM (Ollama) - Optional
+llm:
+  enabled: false    # false = kein Ollama nötig (~88-90% Genauigkeit)
+  url: "http://localhost:11434"
+  model: "gemma3:12b"
+  timeouts:
+    inference: 120
+    warmup: 60
+    availability: 3
+  inference:
+    temperature: 0.1
+    num_predict: 150
+
+# Bayesian Filter
+bayesian:
+  enabled: true
+  llm_fallback: false
+  thresholds:
+    hard_ham: 0.3
+    hard_spam: 0.5
+  model_path: "data/models/bayesian_model.pkl"
+  vectorizer_path: "data/models/vectorizer.pkl"
+  training:
+    min_samples_warning: 100
+    feature_count: 5000
+    cv_folds_min: 2
+    cv_folds_max: 5
+  newsletter:
+    routing: "folder"   # "ham", "folder" oder "spam"
+    folder: "Newsletter"
+```
+
+---
+
+#### Filter-Abschnitt (`filter:`)
+
+| Parameter | Werte | Beschreibung |
+|-----------|-------|--------------|
+| `mode` | `count`/`days` | Filtermodus |
+| `limit` | Zahl | Anzahl E-Mails (bei `mode: count`) |
+| `days_back` | Zahl | Tage zurück (bei `mode: days`) |
+
+---
+
+#### LLM-Abschnitt (`llm:`)
+
+| Parameter | Beschreibung | Standard |
+|-----------|--------------|----------|
+| `enabled: false` | **LLM-freier Modus**<br>• Keine Ollama-Installation nötig<br>• ~88-90% Genauigkeit (nur Bayesian)<br>• Schnell: ~10ms pro Mail | ✅ Empfohlen für Einsteiger |
+| `enabled: true` | **LLM-Modus**<br>• Erfordert Ollama + Modell<br>• ~94-96% Genauigkeit<br>• ~1-3s pro Mail | Für maximale Präzision |
+
+**Verfügbare Modelle** (wenn `enabled: true`):
+
+| Modell | RAM-Bedarf | Empfehlung |
+|--------|------------|------------|
+| `gemma4:e4b` | ~4GB | Schwache Systeme (≤8GB) |
+| `gemma3:12b` | ~8GB | Mittlere Systeme (8–16GB) |
+| `ministral3:14b` | ~9GB | Starke Systeme (16GB+) |
+
+---
+
+#### Bayesian-Abschnitt (`bayesian:`)
+
+Der Bayesian Filter klassifiziert 70-80% der Mails in ~10ms, bevor das LLM zum Einsatz kommt. Dies beschleunigt die Verarbeitung um das 2-3fache.
+
+**Parameter-Erklärung**:
+
+| Parameter | Werte | Beschreibung |
+|-----------|-------|--------------|
+| `enabled` | `true`/`false` | Aktiviert/deaktiviert Bayesian Filter |
+| `llm_fallback` | `true`/`false` | **false**: Unsichere Mails (0.3-0.5) → HAM (schnell, sicher)<br>**true**: Unsichere Mails → LLM (langsamer, genauer) |
+| `thresholds.hard_ham` | 0.0-1.0 | Score unter diesem Wert = HAM (Standard: 0.3) |
+| `thresholds.hard_spam` | 0.0-1.0 | Score über diesem Wert = SPAM (Standard: 0.5) |
+| `model_path` | Pfad | Pfad zum trainierten Modell (.pkl) |
+| `vectorizer_path` | Pfad | Pfad zum TF-IDF Vectorizer (.pkl) |
+| `training.min_samples_warning` | Zahl | Warning-Schwelle für Trainingsmenge |
+| `training.feature_count` | Zahl | Max TF-IDF Features (Standard: 5000) |
+
+**Best Practices:**
+
+#### Threshold-Tuning
+
+**Konservativ (wenig False Positives):**
+```yaml
+bayesian:
+  thresholds:
+    hard_ham: 0.2    # Engerer HAM-Bereich
+    hard_spam: 0.8   # Engerer SPAM-Bereich
+  llm_fallback: true  # LLM für mehr Fälle
+```
+
+**Aggressiv (maximale Geschwindigkeit):**
+```yaml
+bayesian:
+  thresholds:
+    hard_ham: 0.4    # Breiterer HAM-Bereich
+    hard_spam: 0.6   # Breiterer SPAM-Bereich
+  llm_fallback: false  # Kein LLM, HAM bei Unsicherheit
+```
+
+**Standard (empfohlen):**
+```yaml
+bayesian:
+  thresholds:
+    hard_ham: 0.3
+    hard_spam: 0.5
+  llm_fallback: false
+```
+
+#### LLM-Fallback-Strategien
+
+**Strategie 1: Geschwindigkeit (empfohlen)**
+- `llm_fallback: false`
+- Unsichere Mails → HAM (vermeidet False Positives)
+- Durchsatz: ~50-60 Mails/Minute
+
+**Strategie 2: Genauigkeit**
+- `llm_fallback: true`
+- Unsichere Mails → LLM
+- Durchsatz: ~35-40 Mails/Minute
+
+#### Feature-Count Optimierung
+
+**Wenig Trainingsdaten (< 200 Mails):**
+```yaml
+bayesian:
+  training:
+    feature_count: 2000  # Reduziert Overfitting
+```
+
+**Viel Trainingsdaten (500+ Mails):**
+```yaml
+bayesian:
+  training:
+    feature_count: 10000  # Mehr Nuancen erkennen
+```
+
+#### Training-Workflow
+
+1. **Initiales Training:**
+   ```bash
+   make train
+   ```
+
+2. **Nachtrainieren bei False Positives/Negatives:**
+   - Kopiere falsch klassifizierte Mail als `.eml` in `data/training/{spam,ham}/`
+   - Führe `make train` aus
+   - Alte `.eml` Dateien NICHT löschen (Retrain auf allen Daten)
+
+3. **Training-Statistiken prüfen:**
+   ```bash
+   make train-stats
+   ```
+
+**⚠️ Wichtig - Newsletter vs. Spam:**
+- Newsletter gehören zu **HAM**, nicht SPAM!
+- Wenn Newsletter als SPAM trainiert → Filter lernt "zalando.de = SPAM"
+- Folge: ALLE Mails von Zalando werden blockiert (auch Bestellbestätigungen)
+
+---
+
+#### Newsletter-Handling (3-Klassen-Modus)
+
+**Seit Version 1.5**: Der Bayesian Filter unterstützt einen optionalen 3-Klassen-Modus um Newsletter separat zu behandeln.
+
+**Aktivierung:**
+
+1. **Erstelle Newsletter-Trainingsdaten:**
+   ```bash
+   mkdir -p data/training/newsletter
+   # Kopiere .eml Dateien von Newslettern (Zalando, LinkedIn, etc.) nach data/training/newsletter/
+   ```
+
+2. **Training mit 3 Kategorien:**
+   ```bash
+   make train
+   # Erkennt automatisch den newsletter/ Ordner → 3-Klassen-Modus
+   ```
+
+3. **Konfiguriere Newsletter-Routing in `config/settings.yaml`:**
+   ```yaml
+   bayesian:
+     newsletter:
+       routing: "folder"     # "ham", "spam", oder "folder"
+       folder: "Newsletter"  # Nur relevant bei routing: "folder"
+   ```
+
+**Routing-Optionen:**
+
+| Routing | Verhalten | Anwendungsfall |
+|---------|-----------|----------------|
+| `"ham"` | Newsletter bleiben im Posteingang | Standard, keine Änderung am Workflow |
+| `"spam"` | Newsletter → Spam-Ordner | Du möchtest Newsletter aktiv loswerden |
+| `"folder"` | Newsletter → separater Ordner | Beste Option: Newsletter getrennt, aber zugänglich |
+
+**Best Practices:**
+
+✅ **DO:**
+- Trainiere Newsletter als separate Kategorie (nicht als SPAM!)
+- Nutze routing="folder" für besten Workflow
+- Sammle mindestens 50+ Newsletter für gutes Training
+
+❌ **DON'T:**
+- Newsletter nicht als SPAM trainieren (führt zu False Positives!)
+- Transaktions-Mails (Bestellbestätigungen) NICHT als Newsletter
+- Newsletter-Ordner im E-Mail-Client nicht vergessen bei routing="folder"
+
+---
+
+### 3. `.env` - Pfade und Listen-Einstellungen
+**Zweck**: Pfade, Listen-Konfiguration und sonstige globale Einstellungen  
 **Format**: Key=Value  
-**Versionierung**: ❌ NICHT in Git  
+**Versionierung**: ❌ NICHT in Git
+
+> **Hinweis**: Filter-Modus (`FILTER_MODE`, `LIMIT`, `DAYS_BACK`) ist jetzt in `config/filter.yaml`. LLM-Konfiguration ist in `config/ollama.yaml`. Der System-Prompt ist in `config/system_prompt.txt`.
 
 **Beispiel**:
 ```bash
-# LLM-Konfiguration
-OLLAMA_URL=http://localhost:11434/api/generate
-SPAM_MODEL=ministral-3:14b
-
-# Filter-Modus
-FILTER_MODE=count  # "count" oder "days"
-LIMIT=50           # bei MODE=count
-DAYS_BACK=7        # bei MODE=days
-
 # Pfade
-ACCOUNTS_FILE=accounts.yaml
+ACCOUNTS_FILE=config/accounts.yaml
 LOG_PATH=~/spam_filter.log
 ```
 
@@ -55,12 +275,7 @@ LOG_PATH=~/spam_filter.log
 
 | Variable | Werte | Beschreibung |
 |----------|-------|--------------|
-| `OLLAMA_URL` | URL | Ollama API Endpoint |
-| `SPAM_MODEL` | Modellname | Zu nutzendes LLM (z.B. `qwen2.5:14b-instruct`) |
-| `FILTER_MODE` | `count`/`days` | Filtermodus |
-| `LIMIT` | Zahl | Anzahl E-Mails (bei `count`) |
-| `DAYS_BACK` | Zahl | Tage zurück (bei `days`) |
-| `ACCOUNTS_FILE` | Pfad | Pfad zu accounts.yaml |
+| `ACCOUNTS_FILE` | Pfad | Pfad zu accounts.yaml (Standard: `config/accounts.yaml`) |
 | `LOG_PATH` | Pfad | Log-Datei |
 | **`USE_LISTS`** | **`true`/`false`** | **Aktiviert Blacklist/Whitelist-System** |
 | **`LIST_UPDATE_INTERVAL`** | **Zahl** | **Update-Intervall für externe Listen (Stunden)** |
@@ -75,12 +290,15 @@ LOG_PATH=~/spam_filter.log
 
 ### Übersicht
 
-Das Blacklist/Whitelist-System bietet einen **Hard Filter** vor der LLM-Analyse:
+Das Blacklist/Whitelist-System bietet einen **Hard Filter** in der mehrstufigen Pipeline:
 
 **Priorität (von höchster zu niedrigster)**:
 1. **Whitelist** → E-Mail wird IMMER als HAM (kein Spam) behandelt
-2. **Blacklist** → E-Mail wird IMMER als SPAM behandelt  
-3. **LLM-Analyse** → Nur wenn nicht in Listen gefunden
+2. **Blacklist** → E-Mail wird IMMER als SPAM behandelt
+3. **TLD-Check** → Verdächtige Sender-Domain (.xyz, .top, .click…) → SPAM
+4. **SPF/DKIM-Auth** → Doppelter Auth-Fail → SPAM; einzelner Fail → Hint für LLM
+5. **DNSBL-Lookup** → IP in externer Blacklist → SPAM
+6. **LLM-Analyse** → 4-Kategorien: SPAM / PHISHING / COMMERCIAL / HAM
 
 ### Hierarchische Domain-Prüfung (Subdomains)
 
@@ -184,12 +402,23 @@ Automatisch geladen werden (wenn `USE_LISTS=true`):
                                      ↓ JA                ↓ NEIN
                             🚫 SPAM                      ↓
                             └─ FERTIG           ┌──────────────────────────────┐
-                                                │   3. LLM-ANALYSE              │
-                                                │   qwen2.5:14b-instruct        │
-                                                │   analysiert E-Mail           │
+                                                │   3. TLD-CHECK                │
+                                                │   Verdächtige Sender-TLD?     │
+                                                │   (.xyz .top .click .shop …)  │
                                                 └──────────────────────────────┘
-                                                         ↓
-                                                   ✅ HAM / 🚫 SPAM
+                                                         ↓ JA            ↓ NEIN
+                                                🚫 SPAM                   ↓
+                                                └─ FERTIG    ┌─────────────────────┐
+                                                             │  4–5. AUTH + DNSBL  │
+                                                             │  SPF/DKIM + IP-Check│
+                                                             └─────────────────────┘
+                                                                      ↓ NEIN
+                                                             ┌──────────────────────────────┐
+                                                             │   6. LLM-ANALYSE              │
+                                                             │   gemma3:12b / ministral3:14b │
+                                                             │   SPAM / PHISHING /           │
+                                                             │   COMMERCIAL / HAM            │
+                                                             └──────────────────────────────┘
 ```
 
 ### Listen verwalten
@@ -262,7 +491,7 @@ python -c "from src.config import USE_LISTS, LISTS_CACHE_DIR; print(f'USE_LISTS=
 
 ---
 
-### 3. Template-Dateien (mit `.example`)
+### 4. Template-Dateien (mit `.example`)
 
 #### `accounts.yaml.example`
 **Zweck**: Vorlage für `accounts.yaml`  
@@ -305,10 +534,9 @@ cp .env.example .env
         Script lädt Config
                  ↓
 ┌─────────────────────────────────────┐
-│              .env                   │
-│  • FILTER_MODE = count              │ ← Gilt für ALLE Accounts
-│  • LIMIT = 50                       │
-│  • SPAM_MODEL = qwen2.5:14b-instruct│
+│          config/filter.yaml         │
+│  • mode = days                      │ ← Gilt für ALLE Accounts
+│  • days_back = 30                   │
 └─────────────────────────────────────┘
 ```
 
@@ -329,10 +557,11 @@ accounts:
     enabled: true
 ```
 
-**.env**:
-```bash
-FILTER_MODE=count
-LIMIT=20
+**config/filter.yaml**:
+```yaml
+filter:
+  mode: "count"
+  limit: 20
 ```
 
 ---
@@ -352,10 +581,11 @@ accounts:
     enabled: true
 ```
 
-**.env**:
-```bash
-FILTER_MODE=days
-DAYS_BACK=7
+**config/filter.yaml**:
+```yaml
+filter:
+  mode: "days"
+  days_back: 7
 ```
 
 ---

@@ -22,11 +22,11 @@ Lösungen für typische Fehler beim Betrieb des Spam-Filters.
    ollama serve
    ```
 
-2. **Falscher Port/URL**
+2. **Falsche URL**
    ```bash
-   # In .env prüfen
-   OLLAMA_URL=http://localhost:11434/api/generate
-   
+   # In ollama.yaml prüfen
+   url: http://localhost:11434
+
    # Ollama-Status testen
    curl http://localhost:11434/api/tags
    ```
@@ -267,7 +267,7 @@ Prüfe, dass **alle** Felder vorhanden sind:
 
 ---
 
-### ❌ LLM antwortet nicht mit "SPAM" oder "HAM"
+### ❌ LLM klassifiziert nicht korrekt
 
 **Symptom**:
 E-Mails werden alle als HAM klassifiziert, obwohl offensichtlich Spam
@@ -276,24 +276,254 @@ E-Mails werden alle als HAM klassifiziert, obwohl offensichtlich Spam
 
 1. **Falsches Modell**:
    ```bash
-   # In .env - Empfohlene Modelle für deutsche E-Mails
-   SPAM_MODEL=qwen2.5:7b              # Guter Kompromiss (5GB)
-   SPAM_MODEL=qwen2.5:14b-instruct    # Beste Genauigkeit (9GB)
-   
-   # Spezialisiertes Spam-Modell (falls verfügbar)
-   SPAM_MODEL=pravitor/spam-detect    # Deutsche Trainingsdaten (4GB)
+   # In ollama.yaml anpassen - Empfohlene Modelle für deutsche E-Mails
+   model: gemma3:12b       # Guter Kompromiss (~8GB RAM)
+   model: ministral3:14b   # Beste Erkennungsrate (~9GB RAM)
+   model: gemma4:e4b       # Schnell, weniger RAM (~4GB)
    ```
    
    💡 Siehe [Modellübersicht in SETUP.md](SETUP.md#modellauswahl) für Details
 
 2. **Modell nicht geladen**:
    ```bash
-   ollama pull qwen2.5:14b-instruct
+   ollama pull gemma3:12b
    ```
 
-3. **Prompt anpassen** (Code-Änderung):
-   - Öffne `src/spam_filter.py`
-   - Funktion `detect_spam()` → Prompt optimieren
+3. **LLM-Ausgabe prüfen** (Debug):
+   - Prüfe Log-Datei: `tail -f ~/spam_filter.log | grep -i "llm\|spam\|ham"`
+   - Das System erwartet als erste Zeile: `SPAM`, `PHISHING`, `COMMERCIAL` oder `HAM`
+
+---
+
+## Bayesian Filter Probleme
+
+### ❌ "Kein Bayesian-Modell gefunden"
+
+**Fehlermeldung**:
+```
+⚠️  Kein Bayesian-Modell gefunden: data/models/bayesian_model.pkl
+   Führe 'make train' aus, um Bayesian-Filter zu aktivieren.
+   Bis dahin: LLM-Only-Modus
+```
+
+**Ursache**:  
+Du hast den Bayesian Filter aktiviert (`bayesian.enabled: true` in `config/bayesian.yaml`), aber noch kein Modell trainiert.
+
+**Lösung**:
+
+1. **Prüfe ob Training-Daten vorhanden**:
+   ```bash
+   ls data/training/spam/*.eml
+   ls data/training/ham/*.eml
+   ```
+
+2. **Wenn keine .eml Dateien:**
+   ```bash
+   # Exportiere aus IMAP
+   make export-spam
+   make export-ham
+   
+   # Oder: Lege manuell .eml Dateien ab
+   ```
+
+3. **Training starten**:
+   ```bash
+   make train
+   ```
+
+4. **Prüfe ob Modell erstellt wurde**:
+   ```bash
+   ls -lh data/models/bayesian_model.pkl
+   ls -lh data/models/vectorizer.pkl
+   ```
+
+---
+
+### ❌ "Training mit 0 Spam + 0 HAM Mails"
+
+**Fehlermeldung**:
+```
+📂 Lese Training-Daten...
+   Spam: 0 Dateien
+   HAM:  0 Dateien
+
+❌ Keine Spam .eml Dateien gefunden in: data/training/spam
+   Lege mindestens 1 Spam-Mail als .eml Datei dort ab.
+```
+
+**Ursache**:  
+Die Verzeichnisse `data/training/spam/` und `data/training/ham/` sind leer.
+
+**Lösung**:
+
+1. **Option A: Automatischer Export**:
+   ```bash
+   make export-spam   # Exportiert aus IMAP Spam-Ordner
+   make export-ham    # Exportiert aus Sent + INBOX/Whitelist
+   ```
+
+2. **Option B: Manueller Export**:
+   - Exportiere E-Mails aus deinem E-Mail-Client als `.eml` Dateien
+   - Kopiere Spam nach `data/training/spam/`
+   - Kopiere legitime Mails nach `data/training/ham/`
+
+**⚠️ WICHTIG - Newsletter vs. Spam:**
+- Newsletter gehören zu **HAM**, nicht SPAM!
+- Nur echter Betrug/Scam in `spam/` Ordner
+
+---
+
+### ❌ "Training fehlgeschlagen: No module named 'sklearn'"
+
+**Fehlermeldung**:
+```
+ModuleNotFoundError: No module named 'sklearn'
+```
+
+**Ursache**:  
+`scikit-learn` ist nicht installiert.
+
+**Lösung**:
+
+```bash
+# Via Makefile (empfohlen)
+make install
+
+# Oder manuell
+pip install scikit-learn
+```
+
+**Prüfe Installation**:
+```bash
+python -c "import sklearn; print(sklearn.__version__)"
+# Sollte Version ausgeben (z.B. 1.8.0)
+```
+
+---
+
+### ❌ "Bayesian Score immer 0.5 (neutral)"
+
+**Symptom**:  
+Filter gibt für alle Mails Score 0.5 aus und nutzt immer LLM-Fallback.
+
+**Ursache**:  
+Modell ist nicht bereit (ready = False) oder `predict_score()` hat Fehler.
+
+**Lösung**:
+
+1. **Prüfe ob Modell geladen wurde**:
+   ```bash
+   make train-stats
+   ```
+
+   Sollte zeigen:
+   ```
+   ✅ Modell bereit: data/models/bayesian_model.pkl
+   ```
+
+2. **Wenn "Modell nicht bereit"**:
+   - Führe `make train` aus
+   - Prüfe ob `.eml` Dateien vorhanden sind
+
+3. **Wenn Modell existiert, aber nicht lädt**:
+   ```bash
+   # Prüfe Modell-Datei
+   file data/models/bayesian_model.pkl
+   # Sollte: "data" zeigen (Pickle-Datei)
+   
+   # Falls korrupt: Neu trainieren
+   rm data/models/bayesian_model.pkl
+   rm data/models/vectorizer.pkl
+   make train
+   ```
+
+---
+
+### ⚠️ "Niedrige Datenmenge — Genauigkeit < 85%"
+
+**Warnung**:
+```
+⚠️  Hinweis: < 100 Mails pro Kategorie
+   Genauigkeit kann < 85% sein
+   Ziel: 100+ Spam + 100+ HAM für beste Ergebnisse
+```
+
+**Bedeutung**:  
+Du hast weniger als 100 Mails pro Kategorie. Der Filter funktioniert, aber mit geringerer Genauigkeit.
+
+**Lösung**:
+
+1. **Sammle mehr Mails**:
+   ```bash
+   # Exportiere mehr aus IMAP
+   make export-spam   # Erhöht limit in scripts/export_training_data.py
+   make export-ham
+   ```
+
+2. **Oder: Akzeptiere niedrigere Genauigkeit**:
+   - Mit 10+10 Mails: ~75-80% Genauigkeit
+   - Mit 50+50 Mails: ~85-88% Genauigkeit
+   - Mit 100+100 Mails: ~88-90% Genauigkeit
+
+---
+
+### ❌ "Filter markiert alles als Spam"
+
+**Symptom**:  
+Bayesian Filter klassifiziert fast alle Mails als SPAM, auch legitime.
+
+**Ursache**:  
+Newsletter wurden als SPAM trainiert → Filter lernt "zalando.de = SPAM".
+
+**Lösung**:
+
+1. **Prüfe Training-Daten**:
+   ```bash
+   ls data/training/spam/
+   ls data/training/ham/
+   ```
+
+2. **Wenn Newsletter in spam/**:
+   ```bash
+   # Verschiebe Newsletter nach ham/
+   mv data/training/spam/newsletter_*.eml data/training/ham/
+   ```
+
+3. **Neu trainieren**:
+   ```bash
+   make train
+   ```
+
+**Regel**:  
+✅ Newsletter → HAM (auch wenn nervig)  
+❌ Newsletter → SPAM (führt zu False Positives)
+
+---
+
+### ❌ "CV Folds = 2 statt 5"
+
+**Ausgabe bei Training**:
+```
+✅ Training abgeschlossen!
+   CV Folds: 2
+```
+
+**Bedeutung**:  
+Du hast sehr wenig Trainingsdaten (< 25 Mails pro Kategorie).
+
+**Ist das ein Problem?**  
+Nicht unbedingt, aber Genauigkeit ist niedriger:
+- CV=2: ~75-80% Genauigkeit
+- CV=5: ~88-90% Genauigkeit
+
+**Lösung**:  
+Sammle mindestens 25 Spam + 25 HAM Mails für CV=5.
+
+**Faustregel**:
+- < 10 Mails: CV=2
+- 10-24 Mails: CV=2
+- 25-49 Mails: CV=5
+- 50+ Mails: CV=5
 
 ---
 
@@ -305,8 +535,8 @@ E-Mails werden alle als HAM klassifiziert, obwohl offensichtlich Spam
 
 1. **Großes Modell**:
    ```bash
-   # Schnelleres Modell nutzen
-   SPAM_MODEL=qwen2.5:7b  # Statt 14b
+   # Schnelleres Modell in ollama.yaml nutzen
+   model: gemma4:e4b   # Statt gemma3:12b
    ```
 
 2. **Zu viele E-Mails**:
@@ -327,9 +557,9 @@ E-Mails werden alle als HAM klassifiziert, obwohl offensichtlich Spam
 **Geschwindigkeitsvergleich**:
 | Modell | ~Zeit/E-Mail | Empfehlung |
 |--------|--------------|------------|
-| qwen2.5:1.5b | ~0.5s | ⚡ Schnelle Tests |
-| qwen2.5:7b | ~1.5s | ✅ Guter Kompromiss |
-| qwen2.5:14b-instruct | ~3s | 🎯 Beste Genauigkeit |
+| gemma4:e4b | ~1s | ⚡ Schnell, wenig RAM |
+| gemma3:12b | ~2s | ✅ Guter Kompromiss |
+| ministral3:14b | ~3s | 🎯 Beste Erkennungsrate |
 
 ---
 
@@ -426,9 +656,10 @@ python -m py_compile src/spam_filter.py
 
 ```bash
 python -c "
-from src.config import *
-print('Accounts:', EMAIL_ACCOUNTS)
-print('Modell:', SPAM_MODEL)
+import ollama_client
+from config import EMAIL_ACCOUNTS, FILTER_MODE, LIMIT, DAYS_BACK
+print('Modell:', ollama_client.MODEL)
+print('Accounts:', len(EMAIL_ACCOUNTS))
 print('Filter:', FILTER_MODE, LIMIT, DAYS_BACK)
 "
 ```
@@ -458,7 +689,7 @@ print('Filter:', FILTER_MODE, LIMIT, DAYS_BACK)
 | `AUTHENTICATIONFAILED` | Login fehlgeschlagen | Passwort/Username prüfen |
 | `[TRYCREATE]` | Ordner existiert nicht | Spam-Ordner erstellen |
 | `ConnectionRefusedError` | Ollama läuft nicht | `ollama serve` starten |
-| `ModuleNotFoundError` | Dependency fehlt | `pip install -r requirements.txt` |
+| `ModuleNotFoundError` | Dependency fehlt | `pip install -e .` oder `make install` |
 | `yaml.scanner.ScannerError` | YAML-Syntax falsch | Einrückung prüfen |
 
 ---

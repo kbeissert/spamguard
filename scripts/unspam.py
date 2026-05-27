@@ -10,19 +10,15 @@ Usage:
     python unspam.py --auto             # Automatisch: ohne Nachfrage
     python unspam.py --dry-run          # Nur anzeigen, nichts verschieben
 
-Autor: Ollama Spam Guard
+Autor: Spam Guard
 Datum: 2025-11-20
 """
 
-import sys
 import email
 import logging
 import argparse
 from pathlib import Path
 from typing import List, Dict
-
-# Füge src/ zum Python-Path hinzu
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from config import EMAIL_ACCOUNTS, LOG_PATH
 from list_manager import get_list_manager

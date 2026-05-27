@@ -1,4 +1,4 @@
-# Externe Blacklist-Quellen für Ollama Spam Guard
+# Externe Blacklist-Quellen für Spam Guard
 
 ## Übersicht
 

@@ -1,0 +1,66 @@
+# ============================================
+# Spam Guard - Einstellungen (Vorlage)
+# ============================================
+# Kopieren und anpassen:
+#   cp config/settings.yaml.example config/settings.yaml
+
+# --------------------------------------------
+# Filter: Welche E-Mails werden geprüft?
+# --------------------------------------------
+filter:
+  # "count" = letzte X E-Mails pro Account
+  # "days"  = E-Mails der letzten X Tage
+  mode: "count"
+  days_back: 7    # Tage zurück (bei mode: "days")
+  limit: 50       # Anzahl E-Mails (bei mode: "count")
+
+# --------------------------------------------
+# LLM (Ollama) - Optional
+# --------------------------------------------
+llm:
+  # false = kein Ollama nötig (~88-90% Genauigkeit, nur Bayesian)
+  # true  = Ollama erforderlich (~94-96% Genauigkeit)
+  enabled: false
+
+  url: "http://localhost:11434"
+  model: "gemma3:12b"   # ollama list → zeigt verfügbare Modelle
+
+  timeouts:
+    inference: 120      # Max. Wartezeit für eine LLM-Anfrage (Sekunden)
+    warmup: 60          # Max. Wartezeit beim ersten Modell-Start
+    availability: 3     # Timeout beim Erreichbarkeits-Check
+
+  inference:
+    temperature: 0.1    # 0.0 = deterministisch, 1.0 = kreativ
+    num_predict: 150    # Max. generierte Token pro Antwort
+
+# --------------------------------------------
+# Bayesian Filter
+# --------------------------------------------
+bayesian:
+  enabled: true
+
+  # false = Unsichere Mails → HAM (schnell, vermeidet False Positives)
+  # true  = Unsichere Mails → LLM (genauer, erfordert llm.enabled: true)
+  llm_fallback: false
+
+  thresholds:
+    hard_ham: 0.3    # Score < 0.3 → HAM (Auto-deliver)
+    hard_spam: 0.5   # Score > 0.5 → SPAM (Auto-block)
+    # Dazwischen → HAM oder LLM (je nach llm_fallback)
+
+  model_path: "data/models/bayesian_model.pkl"
+  vectorizer_path: "data/models/vectorizer.pkl"
+
+  training:
+    min_samples_warning: 100   # Warnung bei < 100 Mails pro Kategorie
+    feature_count: 5000        # TF-IDF max features
+    cv_folds_min: 2
+    cv_folds_max: 5
+
+  newsletter:
+    # "ham"    = Newsletter → Posteingang
+    # "folder" = Newsletter → separater Ordner (empfohlen)
+    # "spam"   = Newsletter → Spam-Ordner
+    routing: "ham"
+    folder: "Newsletter"   # Ordner muss im E-Mail-Client existieren

@@ -1,4 +1,4 @@
-# Setup-Anleitung: Ollama Spam Guard
+# Setup-Anleitung: Spam Guard
 
 Schritt-für-Schritt-Anleitung zur Ersteinrichtung des lokalen Spam-Filters.
 
@@ -23,8 +23,8 @@ Schritt-für-Schritt-Anleitung zur Ersteinrichtung des lokalen Spam-Filters.
 ### 1. Repository klonen / herunterladen
 
 ```bash
-git clone <repository-url> ollama-spam-guard
-cd ollama-spam-guard
+git clone <repository-url> spam-guard
+cd spam-guard
 ```
 
 Oder ZIP herunterladen und entpacken.
@@ -41,7 +41,7 @@ make install
 
 Dieser Befehl:
 1.  Erstellt einen Ordner `.venv` im Projektverzeichnis.
-2.  Installiert alle benötigten Pakete (`pandas`, `requests`, `tqdm`, etc.) in dieses Environment.
+2.  Installiert alle benötigten Pakete via `pip install -e .` in dieses Environment (nutzt `pyproject.toml`).
 
 **Hinweis**: Du musst das Environment nicht manuell aktivieren. Alle `make`-Befehle (z.B. `make start`, `make benchmark`) nutzen automatisch das korrekte Python aus `.venv`.
 
@@ -84,14 +84,14 @@ sudo systemctl start ollama
 
 #### LLM-Modell herunterladen
 ```bash
-# Empfohlenes Modell (14B Parameter, ~9GB)
-ollama pull qwen2.5:14b-instruct
+# Empfohlenes Modell für mittlere Systeme (16GB RAM)
+ollama pull gemma3:12b
 
-# Alternativ: Kleineres Modell für schnellere Tests
-ollama pull qwen2.5:7b
+# Für starke Systeme (beste Erkennungsrate)
+ollama pull ministral3:14b
 
-# Alternative: Spezialisiertes Spam-Modell
-ollama pull pravitor/spam-detect
+# Für schwache Systeme / schnelle Tests
+ollama pull gemma4:e4b
 ```
 
 
@@ -99,33 +99,27 @@ ollama pull pravitor/spam-detect
 
 Die Wahl des richtigen Modells hängt von deiner Hardware und deinen Anforderungen ab:
 
-### Für schwache Systeme (bis 8GB RAM)
-| Modell | Größe | Geschwindigkeit | Genauigkeit | Besonderheiten |
-|--------|-------|-----------------|-------------|----------------|
-| qwen2.5:1.5b | ~1GB | ⚡⚡⚡ Sehr schnell | ⭐⭐⭐ Gut | Mehrsprachig optimiert |
-| rosemarla/qwen3-classify | ~1.2GB | ⚡⚡⚡ Sehr schnell | ⭐⭐⭐ Gut | Spezialisiert für Spam-Erkennung |
-| deepseek-r1:1.5b | ~1.1GB | ⚡⚡⚡ Sehr schnell | ⭐⭐ OK | Nur für Englisch/Chinesisch empfohlen |
+### Empfohlene Modelle (primäre Auswahl)
 
-### Für mittlere Systeme (8-16GB RAM)
-| Modell | Größe | Geschwindigkeit | Genauigkeit | Besonderheiten |
-|--------|-------|-----------------|-------------|----------------|
-| **qwen2.5:7b** | ~5GB | ⚡⚡ Schnell | ⭐⭐⭐⭐ Sehr gut | **✅ Empfohlen für deutsche E-Mails** |
-| pravitor/spam-detect | ~4GB | ⚡⚡ Schnell | ⭐⭐⭐ Gut | Deutsche Trainingsdaten vorhanden |
-| deepseek-r1:7b | ~4.7GB | ⚡⚡ Schnell | ⭐⭐⭐ Gut | Begrenzt für deutsche Texte |
-| deepseek-r1:8b | ~5.2GB | ⚡⚡ Schnell | ⭐⭐⭐ Gut | Neueste Version (0528) |
+| Modell | Größe | Geschwindigkeit | Genauigkeit | Empfehlung |
+|--------|-------|-----------------|-------------|------------|
+| **gemma4:e4b** | ~4GB | ⚡⚡⚡ Schnell | ⭐⭐⭐⭐ Sehr gut | **✅ Schwache Systeme (≤8GB RAM)** |
+| **gemma3:12b** | ~8GB | ⚡⚡ Mittel | ⭐⭐⭐⭐⭐ Exzellent | **✅ Mittlere Systeme (8–16GB RAM)** |
+| **ministral3:14b** | ~9GB | ⚡⚡ Mittel | ⭐⭐⭐⭐⭐ Exzellent | **🏆 Starke Systeme (16GB+)** |
 
-### Für starke Systeme (16GB+ RAM)
+Alle drei Modelle erhalten denselben Chain-of-Thought System-Prompt und klassifizieren in 4 Kategorien: **SPAM / PHISHING / COMMERCIAL / HAM**.
+
+### Alternative Modelle
+
 | Modell | Größe | Geschwindigkeit | Genauigkeit | Besonderheiten |
 |--------|-------|-----------------|-------------|----------------|
-| **ministral-3:14b** | ~9GB | ⚡ Mittel | ⭐⭐⭐⭐⭐ Exzellent | **🏆 Aktueller Benchmark-Sieger** |
+| qwen2.5:7b | ~5GB | ⚡⚡ Schnell | ⭐⭐⭐ Gut | Mehrsprachig |
 | qwen2.5:14b-instruct | ~9GB | ⚡ Mittel | ⭐⭐⭐⭐ Sehr gut | Solide Alternative |
-
-**💡 Empfehlung**: **Ministral 3 14B** hat sich in unseren Benchmarks als das leistungsfähigste Modell erwiesen, insbesondere bei schwierigen Spam-Fällen. Es bietet die beste Balance aus Präzision und Geschwindigkeit.
 
 **Modell installieren**:
 ```bash
-# Empfohlenes Modell
-ollama pull ministral-3:14b
+# Primäre Empfehlung
+ollama pull gemma3:12b
 ```
 
 --- 4. Konfigurationsdateien erstellen
@@ -135,26 +129,57 @@ ollama pull ministral-3:14b
 cp .env.example .env
 ```
 
-**Bearbeite `.env`**:
+**Bearbeite `.env`** (Pfade und Listen-Einstellungen):
 ```bash
-# LLM-Modell (das du mit ollama pull geladen hast)
-SPAM_MODEL=ministral-3:14b
-
-# Filter-Modus
-FILTER_MODE=count  # Oder "days" für zeitbasiert
-LIMIT=20           # Für erste Tests: niedrigen Wert wählen!
-
 # Pfade (Standard-Werte sind meist OK)
-ACCOUNTS_FILE=accounts.yaml
+ACCOUNTS_FILE=config/accounts.yaml
 LOG_PATH=~/spam_filter.log
+```
+
+#### filter.yaml erstellen
+```bash
+cp config/filter.yaml.example config/filter.yaml
+```
+
+**Bearbeite `config/filter.yaml`**:
+```yaml
+filter:
+  mode: "days"   # "count" oder "days"
+  days_back: 7   # Tage zurück (bei mode: "days")
+  limit: 50      # Anzahl E-Mails (bei mode: "count")
+```
+
+Für erste Tests empfohlen: `mode: "count"` mit `limit: 5`
+
+#### settings.yaml erstellen
+```bash
+cp config/settings.yaml.example config/settings.yaml
+```
+
+**Bearbeite `config/settings.yaml`**:
+```yaml
+llm:
+  enabled: false  # true = LLM-Modus (erfordert Ollama)
+  url: "http://localhost:11434"
+  model: "gemma3:12b"   # Das mit ollama pull geladene Modell
+
+filter:
+  mode: "count"
+  limit: 20   # Für erste Tests niedrig wählen
+
+bayesian:
+  enabled: true
+  thresholds:
+    hard_ham: 0.3
+    hard_spam: 0.5
 ```
 
 #### accounts.yaml erstellen
 ```bash
-cp accounts.yaml.example accounts.yaml
+cp config/accounts.yaml.example config/accounts.yaml
 ```
 
-**Bearbeite `accounts.yaml`**:
+**Bearbeite `config/accounts.yaml`**:
 ```yaml
 accounts:
   - name: "Mein Hauptaccount"
@@ -202,6 +227,8 @@ Gmail erlaubt keine normalen Passwörter für IMAP!
   enabled: true
 ```
 
+Speichere das in `config/accounts.yaml`.
+
 ---
 
 ## Erster Testlauf
@@ -216,7 +243,7 @@ python test_connection.py
 
 **Was wird getestet?**
 1. **Ollama-Verbindung**: Ist Ollama erreichbar auf `http://localhost:11434`?
-2. **LLM-Modell**: Ist das konfigurierte Modell installiert (`qwen2.5:14b-instruct`)?
+2. **LLM-Modell**: Ist das in `ollama.yaml` konfigurierte Modell installiert?
 3. **E-Mail-Accounts**: Für jeden Account in `accounts.yaml`:
    - SSL-Verbindung zum IMAP-Server
    - Login mit Benutzername/Passwort
@@ -285,12 +312,13 @@ python test_connection.py
 
 ### 2. Ersten Spam-Filter-Durchlauf starten
 
-**Wichtig**: Starte mit **niedrigem LIMIT** für erste Tests!
+**Wichtig**: Starte mit **niedrigem Limit** für erste Tests!
 
-Bearbeite `.env`:
-```bash
-FILTER_MODE=count
-LIMIT=5  # Nur 5 E-Mails zum Testen
+Bearbeite `config/filter.yaml`:
+```yaml
+filter:
+  mode: "count"
+  limit: 5  # Nur 5 E-Mails zum Testen
 ```
 
 Dann starte das Script:
@@ -332,14 +360,15 @@ python src/spam_filter.py
 
 ### 1. Filter-Limit erhöhen
 
-Nach erfolgreichen Tests in `.env`:
-```bash
-FILTER_MODE=count
-LIMIT=50  # Oder höher
+Nach erfolgreichen Tests in `config/filter.yaml`:
+```yaml
+filter:
+  mode: "count"
+  limit: 50   # Oder höher
 
 # Alternativ: Zeitbasiert
-FILTER_MODE=days
-DAYS_BACK=7
+# mode: "days"
+# days_back: 7
 ```
 
 ### 2. Weitere Accounts hinzufügen
@@ -431,6 +460,171 @@ gpg accounts.yaml.gpg
 
 ---
 
+## 4. Bayesian Filter Training (Optional)
+
+Der Bayesian Filter ist ein **intelligenter Pre-Filter** der 70-80% der Mails in ~10ms klassifiziert, bevor das LLM zum Einsatz kommt. Dies beschleunigt die Verarbeitung um das 2-3fache.
+
+### Warum Bayesian Training?
+
+**Ohne Bayesian:**
+- Alle Mails gehen durch LLM (~1,6s pro Mail)
+- Durchsatz: ~25 Mails/Minute
+
+**Mit Bayesian:**
+- 70-80% werden in 10ms klassifiziert
+- LLM nur für schwierige Fälle
+- Durchsatz: ~50-60 Mails/Minute
+
+### Voraussetzungen
+
+- Mindestens 100 Spam + 100 HAM E-Mails als `.eml` Dateien
+- `scikit-learn` muss installiert sein (bereits in `requirements.txt` enthalten)
+
+### Training-Workflow
+
+#### Schritt 1: E-Mails exportieren
+
+**Option A: Automatisch (empfohlen)**
+
+```bash
+# Exportiert Spam aus IMAP Spam-Ordner
+make export-spam
+
+# Exportiert HAM aus Sent-Ordner (60%) + INBOX/Whitelist (40%)
+make export-ham
+```
+
+**Was passiert?**
+- `export-spam`: Liest letzte 90 Tage aus Spam-Ordner → `data/training/spam/*.eml`
+- `export-ham`: Liest aus Sent-Ordner (garantiert HAM) + INBOX mit Whitelist-Filter → `data/training/ham/*.eml`
+
+**Option B: Manuell**
+
+1. Exportiere E-Mails aus deinem E-Mail-Client als `.eml` Dateien
+2. Kopiere Spam-Mails nach `data/training/spam/`
+3. Kopiere legitime Mails nach `data/training/ham/`
+
+**⚠️ WICHTIG - Was ist Spam und was nicht?**
+
+✅ **SPAM** (gehört in `data/training/spam/`):
+- Lotto-Gewinn-Mails, Phishing, Betrug
+- Viagra/Pillen-Werbung
+- Investment-Scams
+- Gefälschte Bank-/PayPal-Mails
+
+❌ **KEIN SPAM** (gehört in `data/training/ham/`):
+- Newsletter (Zalando, LinkedIn, GitHub) - auch wenn nervig!
+- Benachrichtigungen (Facebook, Twitter)
+- Firmenmails (Arbeit, Rechnungen)
+- Mails von Freunden/Familie
+
+**Warum ist das wichtig?**  
+Wenn du Newsletter als SPAM trainierst, lernt der Filter "zalando.de = SPAM" und blockiert später ALLE Mails von Zalando - auch Bestellbestätigungen!
+
+#### Schritt 2: Training starten
+
+```bash
+make train
+```
+
+**Was passiert?**
+1. Duplikate werden automatisch aus allen Trainings-Ordnern entfernt (MD5-Vergleich)
+2. Alle `.eml` Dateien werden gelesen und das Modell neu trainiert
+
+**Ausgabe:**
+```
+🤖 Training Bayesian Filter...
+
+📂 Lese Training-Daten...
+   Spam: 120 Dateien
+   HAM:  105 Dateien
+
+✅ Training abgeschlossen!
+   Spam: 120 Mails
+   HAM:  105 Mails
+   CV Folds: 5
+   Features: 1847
+
+💾 Modell gespeichert: data/models/bayesian_model.pkl
+```
+
+**Was bedeutet das?**
+- **CV Folds 5**: Optimale Kalibrierung (2 = wenig Daten, 5 = gut trainiert)
+- **Features 1847**: Der Filter kennt 1847 Wörter/Muster
+- **Dauer**: ~5-10 Sekunden für 200 Mails
+
+**Warnung bei wenig Daten:**
+```
+⚠️  Hinweis: < 100 Mails pro Kategorie
+   Genauigkeit kann < 85% sein
+   Ziel: 100+ Spam + 100+ HAM für beste Ergebnisse
+```
+
+#### Schritt 3: Training-Statistiken prüfen
+
+```bash
+make train-stats
+```
+
+**Ausgabe:**
+```
+📊 Bayesian Filter Statistics
+============================================================
+✅ Modell bereit: data/models/bayesian_model.pkl
+   Vectorizer: data/models/vectorizer.pkl
+   Features: 1847
+   Modell-Größe: 23.6 KB
+
+📅 Letztes Training: 2026-05-26T18:23:47
+   Spam-Mails: 120
+   HAM-Mails: 105
+   CV Folds: 5
+```
+
+### Konfiguration
+
+Bayesian-Filter-Einstellungen in `config/settings.yaml`:
+
+```yaml
+bayesian:
+  enabled: true           # Bayesian Filter aktivieren
+  llm_fallback: false     # LLM nur bei Unsicherheit (0.3-0.5)
+  
+  thresholds:
+    hard_ham: 0.3         # Score < 0.3 → Auto-deliver (kein LLM)
+    hard_spam: 0.5        # Score > 0.5 → Auto-spam (kein LLM)
+  
+  training:
+    min_samples_warning: 100    # Warning bei < 100 Mails
+    feature_count: 5000         # TF-IDF max features
+```
+
+**Empfehlung:**  
+Starte mit `llm_fallback: false` für maximale Geschwindigkeit. Aktiviere LLM-Fallback nur wenn du mehr Genauigkeit brauchst.
+
+### Nachtrainieren
+
+Wenn der Filter Fehler macht (False Positives/Negatives):
+
+1. Kopiere falsch klassifizierte Mail als `.eml` in `data/training/spam/` oder `data/training/ham/`
+2. Führe `make train` aus
+3. Das Modell lernt die neuen Patterns dazu
+
+**⚠️ Wichtig:** Die alten `.eml` Dateien **NICHT löschen**!  
+Bei jedem `make train` wird auf ALLEN Mails neu trainiert (dauert nur ~2s für 1000 Mails).
+
+### Optimale Trainingsmenge
+
+| Menge | Genauigkeit | Empfehlung |
+|-------|-------------|------------|
+| 10 + 10 | < 85% | Nur für Tests |
+| 50 + 50 | 85-88% | Minimum für Produktion |
+| **100 + 100** | **88-90%** | **Empfohlen** ⭐ |
+| 200 + 200 | 90-95% | Optimal |
+| 500 + 500 | 95%+ | Diminishing Returns |
+
+---
+
 ## Nächste Schritte
 
 Nach erfolgreichem Setup:
@@ -453,8 +647,9 @@ Gehe diese Schritte durch, um sicherzustellen, dass alles richtig konfiguriert i
 - [ ] **Python 3.8+** installiert (`python --version`)
 - [ ] **Dependencies** installiert (`make install` oder `pip install -r requirements.txt`)
 - [ ] **Ollama** läuft (`ollama serve` oder als Dienst)
-- [ ] **LLM-Modell** heruntergeladen (`ollama pull qwen2.5:14b-instruct`)
+- [ ] **LLM-Modell** heruntergeladen (`ollama pull gemma3:12b` oder Alternative)
 - [ ] **`.env`** erstellt und angepasst (aus `.env.example`)
+- [ ] **`config/settings.yaml`** erstellt und angepasst (aus `settings.yaml.example`)
 - [ ] **`accounts.yaml`** erstellt und angepasst (aus `accounts.yaml.example`)
 - [ ] Mindestens **ein Account** mit `enabled: true`
 - [ ] **Verbindungstest erfolgreich** (`make test` → alle ✅)
@@ -499,9 +694,9 @@ make run
 ## Tipps für den produktiven Einsatz
 
 ### Starte mit kleinen Schritten
-1. **Woche 1**: `LIMIT=10`, täglich manuell ausführen
-2. **Woche 2**: `LIMIT=50`, prüfe Spam-Ordner auf False Positives
-3. **Ab Woche 3**: `FILTER_MODE=days` mit `DAYS_BACK=1`, per Cronjob automatisieren
+1. **Woche 1**: `limit: 10`, täglich manuell ausführen
+2. **Woche 2**: `limit: 50`, prüfe Spam-Ordner auf False Positives
+3. **Ab Woche 3**: `mode: "days"` mit `days_back: 1`, per Cronjob automatisieren
 
 ### Überwache das Log
 ```bash
@@ -514,5 +709,5 @@ tail -f ~/spam_filter.log
 
 ### False Positives vermeiden
 - Prüfe regelmäßig den Spam-Ordner
-- Bei häufigen Fehlern: Modell wechseln oder Prompt anpassen (in `src/spam_filter.py`)
-- Wichtige Absender zur Whitelist hinzufügen (erfordert Code-Anpassung)
+- Bei häufigen Fehlern: Modell in `ollama.yaml` wechseln
+- Wichtige Absender zur Whitelist hinzufügen: `make unspam wichtig@firma.de`

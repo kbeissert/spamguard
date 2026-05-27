@@ -6,8 +6,10 @@
 .env
 .env.*
 !.env.example
-accounts.yaml
-!accounts.yaml.example
+config/accounts.yaml
+!config/accounts.yaml.example
+config/settings.yaml
+!config/settings.yaml.example
 
 # User-spezifische Listen (persönliche Daten!)
 data/lists/whitelist.txt

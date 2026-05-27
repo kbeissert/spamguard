@@ -87,14 +87,25 @@ Zeigt nur, was verschoben würde, ohne tatsächlich Änderungen vorzunehmen.
 
 ## Verwendungsszenarien
 
-### Szenario 1: Newsletter fälschlich blockiert
+### Szenario 1: Newsletter fälschlich blockiert → Posteingang
 
 1. Newsletter landet im Spam
 2. Du siehst den Absender in der Spam-Übersicht
-3. Füge ihn zur Whitelist hinzu
-4. Führe `make unspam` aus
-5. Newsletter ist zurück im Posteingang
-6. Zukünftige Newsletter landen automatisch im Posteingang
+3. Füge ihn zur Whitelist hinzu und stelle wieder her:
+   ```bash
+   make unspam news@beispiel.de
+   ```
+4. Newsletter ist zurück im Posteingang
+5. Zukünftige Mails von dieser Adresse landen automatisch im Posteingang
+
+### Szenario 1b: Newsletter fälschlich blockiert → Newsletter-Ordner
+
+Falls du Newsletter lieber im Newsletter-Ordner als im Posteingang haben möchtest:
+
+```bash
+# Verschiebt in Newsletter-Ordner (kein Whitelist-Eintrag)
+make unspam-newsletter news@beispiel.de
+```
 
 ### Szenario 2: Wichtige Geschäftsmail verpasst
 
@@ -119,9 +130,38 @@ make unspam
 | Befehl | Beschreibung | Verwendung |
 |--------|--------------|------------|
 | `make unspam` | Interaktiv: fragt nach Bestätigung | Standard-Nutzung |
+| `make unspam <adresse>` | Whitelist + Wiederherstellen → Posteingang | Falsch als Spam markierte Mail |
+| `make unspam-newsletter <adresse>` | Spam → Newsletter-Ordner (ohne Whitelist) | Fälschlich als Spam markierter Newsletter |
 | `make unspam-auto` | Automatisch: keine Nachfrage | Cron-Jobs, Scripts |
 | `make unspam-dry` | Dry-Run: nur anzeigen | Vorschau, Testen |
 | `python unspam.py --help` | Hilfe anzeigen | Detaillierte Optionen |
+
+### Newsletter aus Spam wiederherstellen
+
+Wenn ein Newsletter fälschlich im Spam-Ordner landet, aber **nicht in den Posteingang** soll:
+
+```bash
+# Newsletter → Newsletter-Ordner (kein Whitelist-Eintrag!)
+make unspam-newsletter news@substack.com
+
+# Auch für ganze Domains
+make unspam-newsletter substack.com
+```
+
+**Unterschied zu `make unspam`:**
+- `make unspam`: Fügt zur Whitelist hinzu → Mail → **Posteingang**
+- `make unspam-newsletter`: Kein Whitelist-Eintrag → Mail → **Newsletter-Ordner**
+
+**Warum kein Whitelist-Eintrag?**  
+Newsletter sollen nicht als "vertrauenswürdig" gelten wie Geschäftsmails. Sie landen im Newsletter-Ordner, nicht im Posteingang – so bleibt der Posteingang übersichtlich.
+
+**Voraussetzung:** Der Newsletter-Ordner muss in deinem E-Mail-Client existieren (Standard: `Newsletter`). Der Ziel-Ordner ist in `config/bayesian.yaml` konfiguriert:
+```yaml
+bayesian:
+  newsletter:
+    routing: "folder"
+    folder: "Newsletter"  # ← Dieser Ordner wird verwendet
+```
 
 ## Wie funktioniert es?
 
@@ -160,7 +200,7 @@ Richte einen wöchentlichen Check ein:
 
 ```bash
 # Crontab
-0 9 * * 1 cd /path/to/ollama-spam-guard && make unspam-dry | mail -s "Unspam Report" deine@email.de
+0 9 * * 1 cd /path/to/spam-guard && make unspam-dry | mail -s "Unspam Report" deine@email.de
 ```
 
 ### Dokumentiere deine Whitelist
@@ -276,7 +316,7 @@ $ make unspam
 #!/bin/bash
 # daily-spam-check.sh
 
-cd /path/to/ollama-spam-guard
+cd /path/to/spam-guard
 
 # 1. Spam-Filter ausführen
 make run

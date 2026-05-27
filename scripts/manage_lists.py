@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Listen-Verwaltung für Ollama Spam Guard
+Listen-Verwaltung für Spam Guard
 Vereinfachtes Tool zum Hinzufügen/Entfernen von E-Mails und Domains
 
 Usage:
@@ -13,7 +13,7 @@ Usage:
     python manage_lists.py blacklist remove spam@bad.com
     python manage_lists.py blacklist show
 
-Autor: Ollama Spam Guard
+Autor: Spam Guard
 Datum: 2025-11-20
 """
 
@@ -22,15 +22,16 @@ import argparse
 from pathlib import Path
 from typing import List, Set
 
-# Füge src/ zum Python-Path hinzu
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from constants import MAX_LIST_ENTRY_LENGTH
+from config import (
+    WHITELIST_FILE as _WHITELIST_STR,
+    BLACKLIST_FILE as _BLACKLIST_STR,
+    PROJECT_ROOT,
+)
 
-from constants import MAX_LIST_ENTRY_LENGTH  # noqa: E402
-
-# Pfade zu Listen-Dateien
-LISTS_DIR = Path(__file__).parent.parent / "data" / "lists"
-WHITELIST_FILE = LISTS_DIR / "whitelist.txt"
-BLACKLIST_FILE = LISTS_DIR / "blacklist.txt"
+# Pfade zu Listen-Dateien (SSOT: config.py)
+WHITELIST_FILE = PROJECT_ROOT / _WHITELIST_STR
+BLACKLIST_FILE = PROJECT_ROOT / _BLACKLIST_STR
 
 
 def ensure_file_exists(file_path: Path) -> None:

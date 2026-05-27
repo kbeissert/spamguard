@@ -80,6 +80,18 @@ MAX_SUBJECTS_TO_SHOW = 3
 # Temperature parameter for LLM (lower = more deterministic)
 LLM_TEMPERATURE = 0.1  # Range: 0.0 (deterministic) to 1.0 (random)
 
+# Minimum length for a valid LLM response (shorter = empty/error, treat as HAM)
+LLM_MIN_RESPONSE_LENGTH = 3
+
+# Verdict labels that map to is_spam=True (all non-HAM categories)
+SPAM_VERDICT_LABELS = frozenset(["SPAM", "PHISHING", "COMMERCIAL"])
+
+# Suspicious TLDs predominantly used by spammers
+SUSPICIOUS_TLDS = frozenset([
+    ".xyz", ".top", ".click", ".shop", ".loan", ".work",
+    ".gq", ".ml", ".tk", ".cf", ".ga", ".buzz", ".rest",
+])
+
 # ============================================
 # Logging & Output
 # ============================================

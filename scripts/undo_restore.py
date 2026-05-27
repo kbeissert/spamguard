@@ -3,16 +3,12 @@
 Undo Restore - Verschiebt fälschlich wiederhergestellte Mails zurück in den Spam-Ordner.
 """
 
-import sys
 import imaplib
 import email
-from pathlib import Path
 from typing import Dict
 
-# Füge src/ zum Python-Path hinzu
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from config import EMAIL_ACCOUNTS
+from imap_utils import imap_connection
 
 # Liste der fälschlich wiederhergestellten Absender (aus dem Log extrahiert)
 TARGET_SENDERS = [
@@ -99,11 +95,6 @@ WHITELISTED = [
     "payments-noreply@google.com"
 ]
 
-def connect_imap(account: Dict[str, str]) -> imaplib.IMAP4_SSL:
-    mail = imaplib.IMAP4_SSL(account["server"], int(account["port"]))
-    mail.login(account["user"], account["password"])
-    return mail
-
 def _try_move_email(
     mail: imaplib.IMAP4_SSL,
     email_id: bytes,
@@ -137,29 +128,22 @@ def undo_restore():
     for account in EMAIL_ACCOUNTS:
         print(f"\n📬 Account: {account['name']}")
         try:
-            mail = connect_imap(account)
-            mail.select("INBOX")
+            with imap_connection(account, "INBOX") as mail:
+                status, data = mail.search(None, "ALL")
+                if status != "OK" or not data[0]:
+                    print("   Posteingang leer oder Fehler.")
+                    continue
 
-            # Suche alle Mails (wir filtern manuell, da SEARCH OR ... zu lang werden kann)
-            status, data = mail.search(None, "ALL")
-            if status != "OK" or not data[0]:
-                print("   Posteingang leer oder Fehler.")
-                continue
+                email_ids = data[0].split()
+                print(f"   Prüfe {len(email_ids)} E-Mails im Posteingang...")
 
-            email_ids = data[0].split()
-            print(f"   Prüfe {len(email_ids)} E-Mails im Posteingang...")
+                moved_count = 0
+                for email_id in email_ids:
+                    try:
+                        moved_count += _try_move_email(mail, email_id, account)
+                    except Exception as e:
+                        print(f"   Fehler bei Mail-ID {email_id}: {e}")
 
-            moved_count = 0
-
-            for email_id in email_ids:
-                try:
-                    moved_count += _try_move_email(mail, email_id, account)
-                except Exception as e:
-                    print(f"   Fehler bei Mail-ID {email_id}: {e}")
-
-            mail.expunge()
-            mail.close()
-            mail.logout()
             print(f"   ✅ {moved_count} E-Mails zurück in Spam verschoben.")
 
         except Exception as e:

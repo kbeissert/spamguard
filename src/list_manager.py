@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Blacklist/Whitelist Manager für Ollama Spam Guard
+Blacklist/Whitelist Manager für Spam Guard
 Lädt und verwaltet Spam-Blacklists und Whitelists aus externen Quellen
 
 Update-Intervall: Standardmäßig alle 24 Stunden
@@ -118,7 +118,7 @@ def _load_yaml_content() -> Optional[Dict]:
     except yaml.YAMLError as e:
         error_msg = (
             f"❌ YAML SYNTAX-FEHLER in {BLACKLIST_SOURCES_FILE.name}:\n"
-            f"   {str(e)}\n\n"
+            f"   {e!s}\n\n"
             f"   Häufige Fehler:\n"
             f"   - Falsche Einrückung (nutze 2 Leerzeichen, keine Tabs)\n"
             f"   - Fehlende Anführungszeichen bei URLs\n"
@@ -133,7 +133,7 @@ def _load_yaml_content() -> Optional[Dict]:
     except Exception as e:
         error_msg = (
             f"❌ FEHLER beim Laden von {BLACKLIST_SOURCES_FILE.name}:\n"
-            f"   {str(e)}\n"
+            f"   {e!s}\n"
             f"   Prüfe die Datei auf Fehler!"
         )
         logging.error(
@@ -411,7 +411,7 @@ class ListManager:
         except Exception as e:
             error_msg = (
                 f"❌ FEHLER beim Laden der {list_name} ({file_path}):\n"
-                f"   {str(e)}\n"
+                f"   {e!s}\n"
                 f"   Prüfe die Datei auf Fehler!"
             )
             print(error_msg)

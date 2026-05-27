@@ -1,6 +1,8 @@
 # 📊 Benchmark-Dokumentation
 
-Der **Ollama Spam Guard** enthält ein integriertes Benchmark-Tool. Damit kannst du testen, wie gut verschiedene LLM-Modelle (z.B. `ministral`, `qwen`, `mistral`) Spam erkennen, wie schnell sie sind und welches für deinen Anwendungsfall am besten geeignet ist.
+**Spam Guard** enthält ein integriertes Benchmark-Tool. Damit kannst du testen, wie gut verschiedene LLM-Modelle (z.B. `gemma3:12b`, `gemma4:e4b`, `ministral3:14b`) Spam erkennen, wie schnell sie sind und welches für deinen Anwendungsfall am besten geeignet ist.
+
+Das Benchmark-Tool klassifiziert in **4 Kategorien**: SPAM, PHISHING, COMMERCIAL, HAM.
 
 ---
 
@@ -49,9 +51,6 @@ Das Tool vergibt automatisch Auszeichnungen:
 *   🎯 **Präzision**: Höchste Erkennungsrate.
 *   ⚡ **Speed**: Schnellstes Modell mit akzeptabler Genauigkeit (>80%).
 
-### Optimierungen
-Für Modelle wie **Ministral** wendet der Benchmark automatisch Optimierungen an (z.B. spezifische System-Prompts), um den Token-Verbrauch massiv zu senken und die Präzision bei unbekannten Absendern zu sichern.
-
 ---
 
 ## 💡 Strategie zur Modellwahl
@@ -62,12 +61,11 @@ Für Modelle wie **Ministral** wendet der Benchmark automatisch Optimierungen an
 2.  **Geschwindigkeit ist kritisch**: Wenn dein Postfach 100+ E-Mails am Tag empfängt, macht es einen riesigen Unterschied, ob eine Analyse 0,5 Sekunden oder 2 Sekunden dauert.
 3.  **Ressourcen-Effizienz**: Ein 8B-Modell benötigt ca. 5-6 GB RAM, während ein 14B-Modell oft 9 GB+ belegt.
 
-### Aktuelle Empfehlung (Dez 2025)
+### Empfehlung
 
-**Ministral 3 14B** hat sich als Benchmark-Sieger etabliert:
-*   Exzellente Präzision (auch bei schwierigen Fällen).
-*   Hohe Effizienz dank optimierter Prompts.
-*   Gute Geschwindigkeit.
+**gemma3:12b** bietet eine gute Balance aus Erkennungsrate und RAM-Verbrauch für mittlere Systeme. Für maximale Erkennungsrate auf starken Systemen: **ministral3:14b**. Für wenig RAM: **gemma4:e4b**.
+
+Alle drei erhalten denselben Chain-of-Thought System-Prompt und nutzen die `/api/chat`-Schnittstelle.
 
 ---
 
@@ -86,7 +84,7 @@ Du kannst das Benchmark-Skript auch direkt mit Parametern aufrufen. Nutze dafür
 
 ```bash
 # Bestimmtes Modell testen
-.venv/bin/python scripts/benchmark/spam_benchmark.py --model ministral-3:14b
+.venv/bin/python scripts/benchmark/spam_benchmark.py --model gemma3:12b
 
 # Eigene Test-Daten verwenden
 .venv/bin/python scripts/benchmark/spam_benchmark.py --input meine_emails.csv
