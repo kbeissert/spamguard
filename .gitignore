@@ -26,7 +26,6 @@ data/lists/external/
 # Trainings-Daten & Modelle (lokal, nicht im Repo)
 data/training/
 data/models/
-data/lists/blacklist_sources.yaml
 
 # Build-Artefakte
 *.egg-info/
@@ -44,9 +43,8 @@ __pycache__/
 *.log
 spam_filter.log
 
-# Benchmark Results (nur README + Testdaten behalten)
+# Benchmark Results (nur Testdaten behalten)
 benchmark/*
-!benchmark/README.md
 !benchmark/test_emails.yaml
 
 # IDE & Editors
