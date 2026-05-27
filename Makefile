@@ -4,7 +4,7 @@
 
 .PHONY: help start spam unspam unspam-newsletter show-lists audit \
         export-spam export-ham train train-stats train-with-starter \
-        load-blacklists benchmark benchmark-quick \
+        load-blacklists benchmark benchmark-quick benchmark-real \
         install clean test status \
         whitelist audit-whitelist audit-blacklist import-starter
 
@@ -42,8 +42,10 @@ help:
 	@echo "  make load-blacklists    Externe Blacklists herunterladen"
 	@echo ""
 	@echo "  ─── Benchmark ───────────────────────────────────────"
-	@echo "  make benchmark          Interaktiver Modell-Vergleich"
-	@echo "  make benchmark-quick    Schnelltest (5 Mails)"
+	@echo "  make benchmark                         Interaktiver Modell-Vergleich (synth.)"
+	@echo "  make benchmark-quick                   Schnelltest (5 Mails)"
+	@echo "  make benchmark-real                    Real-Mail-Benchmark (Training-Daten)"
+	@echo "  make benchmark-real MODEL=gemma3:12b   Direkt mit Modell testen"
 	@echo ""
 	@echo "  ─── Setup & Wartung ─────────────────────────────────"
 	@echo "  make install            Dependencies installieren (.venv)"
@@ -156,6 +158,9 @@ benchmark:
 
 benchmark-quick:
 	@$(PYTHON) scripts/benchmark/start_benchmark.py --quick
+
+benchmark-real:
+	@$(PYTHON) scripts/benchmark/real_benchmark.py $(if $(MODEL),--model $(MODEL),) $(if $(LABEL),--label $(LABEL),)
 
 # ============================================
 # Setup & Wartung
