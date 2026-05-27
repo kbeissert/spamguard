@@ -23,7 +23,7 @@ Das gesamte SpamGuard-Projekt folgt einer unumstößlichen Prämisse: der strikt
    Der Kern der Filter-Pipeline (`spam_filter.py`) ist kompromisslos sequentiell, ausfallsicher (`try...finally`) und minimalistisch. Sein **einziges** Ziel: E-Mails der 7-stufigen Pipeline zuführen, das Ergebnis loggen und Spam in den konfigurierten Ordner verschieben. Keine Management-Abhängigkeiten gefährden diesen Prozess.
 
 2. **Management (Downstream-Tools):**
-   Verwaltungswerkzeuge – `unspam.py`, `manage_lists.py`, `undo_restore.py` – sind vollständig vom Filter-Core entkoppelt. Sie laufen als eigenständige Prozesse und dürfen den Filter-Loop niemals direkt aufrufen, verändern oder durch Seiteneffekte beeinflussen.
+   Verwaltungswerkzeuge – `unspam.py`, `manage_lists.py` – sind vollständig vom Filter-Core entkoppelt. Sie laufen als eigenständige Prozesse und dürfen den Filter-Loop niemals direkt aufrufen, verändern oder durch Seiteneffekte beeinflussen.
 
 ### 🛑 Zweite Regel: Single Source of Truth (SSOT) & DRY (Don't Repeat Yourself)
 
@@ -103,7 +103,6 @@ if len(response) < LLM_MIN_RESPONSE_LENGTH:
 │ Layer 4: Management-Tools (entkoppelt)               │
 │ - scripts/manage_lists.py   (Whitelist/Blacklist CLI)│
 │ - scripts/unspam.py         (False-Positives retten) │
-│ - scripts/undo_restore.py   (Unspam rückgängig)      │
 │ - scripts/list_folders.py   (IMAP-Ordner-Erkundung)  │
 │ - scripts/test_connection.py (System-Health-Check)   │
 └──────────────────────────────────────────────────────┘
@@ -111,7 +110,8 @@ if len(response) < LLM_MIN_RESPONSE_LENGTH:
 ┌──────────────────────────────────────────────────────┐
 │ Layer 5: Benchmark-Subsystem (entkoppelt)            │
 │ - scripts/benchmark/start_benchmark.py (Launcher)   │
-│ - scripts/benchmark/spam_benchmark.py  (Messung)     │
+│ - scripts/benchmark/spam_benchmark.py  (Synthetisch) │
+│ - scripts/benchmark/real_benchmark.py  (Real-Daten)  │
 │ - scripts/benchmark/model_selector.py  (Modell-Wahl) │
 │ - benchmark/                           (Ergebnisse)  │
 └──────────────────────────────────────────────────────┘
@@ -285,9 +285,8 @@ Alle Tools in `scripts/` sind **eigenständige Prozesse** ohne Rückwirkung auf 
 |---|---|---|
 | `manage_lists.py` | `make spam <addr>` / `make unspam <addr>` | Einträge zu Whitelist/Blacklist hinzufügen |
 | `unspam.py` | `make unspam <addr>` (via Makefile) | Whitelist-Absender aus Spam-Ordner zurückverschieben |
-| `undo_restore.py` | Direkt | Fälschlich wiederhergestellte Mails zurück in Spam |
 | `list_folders.py` | Direkt | IMAP-Ordnerstruktur eines Accounts anzeigen |
-| `test_connection.py` | `make status` | Ollama + IMAP-Verbindungstest ohne E-Mail-Verarbeitung |
+| `test_connection.py` | `make test` | Ollama + IMAP-Verbindungstest ohne E-Mail-Verarbeitung |
 
 ---
 
@@ -296,6 +295,8 @@ Alle Tools in `scripts/` sind **eigenständige Prozesse** ohne Rückwirkung auf 
 Das Benchmark-Subsystem ist **vollständig entkoppelt** vom Filter-Core. Es dient zur Modell-Auswahl und nutzt seine eigene Testdaten-YAML (`benchmark/test_emails.yaml`).
 
 **Ablauf:** `make benchmark` → `start_benchmark.py` → interaktive Modellauswahl → `spam_benchmark.py` → Ergebnisse in `benchmark/`
+
+`make benchmark-real` → `real_benchmark.py` → echte Training-Mails → drei Testgruppen (G1/G2/G3) → Ergebnisse in `benchmark/real_*.csv`
 
 ---
 
@@ -318,12 +319,6 @@ logging.error(f"IMAP-Fehler: {e}", exc_info=True)
 ---
 
 ## Bekannte technische Schulden
-
-### Kategorie: Code Smells
-
-1. **`undo_restore.py` — Hardcodierte Absender-Liste**
-   - **Problem:** `TARGET_SENDERS` ist eine statische Liste im Skript-Code
-   - **Fix:** Aus einer Datei lesen oder interaktiv per CLI übergeben
 
 ### Kategorie: Missing Features
 

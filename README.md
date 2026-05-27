@@ -40,7 +40,7 @@ make install
 
 **Oder manuell:**
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ### 2. Konfiguration erstellen
