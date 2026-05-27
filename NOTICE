@@ -1,0 +1,22 @@
+SpamGuard
+Copyright 2025-2026 Kay Beißert
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+---
+
+This software uses the following open-source components as external dependencies.
+No source code from these components was incorporated into this project.
+
+  scikit-learn        BSD-3-Clause   https://scikit-learn.org
+  requests            Apache-2.0     https://requests.readthedocs.io
+  dnspython           ISC            https://www.dnspython.org
+  PyYAML              MIT            https://pyyaml.org
+  pandas              BSD-3-Clause   https://pandas.pydata.org
+  python-dotenv       BSD-3-Clause   https://github.com/theskumar/python-dotenv
+  tqdm                MIT/MPL-2.0    https://tqdm.github.io
+  questionary         MIT            https://github.com/tmbo/questionary
+
+All dependencies are used via standard Python package installation (pip) and
+are not bundled with or incorporated into this project's source code.

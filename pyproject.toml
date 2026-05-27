@@ -1,6 +1,12 @@
 [project]
 name = "spam-guard"
-version = "0.3.0"
+version = "0.5.0"
+description = "Local AI-powered email spam filter using Ollama LLMs and Bayesian pre-filtering"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Kay Beißert", email = "kay.beissert@media-garage.de"},
+]
 requires-python = ">=3.8"
 dependencies = [
     "python-dotenv>=1.0.0",
